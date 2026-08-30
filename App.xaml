@@ -1,0 +1,22 @@
+<Application x:Class="Echo.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Styles/DesignTokens.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Drop shadow for the HUD -->
+            <DropShadowEffect x:Key="HudShadow"
+                              BlurRadius="20"
+                              ShadowDepth="4"
+                              Direction="270"
+                              Color="#000000"
+                              Opacity="0.5" />
+        </ResourceDictionary>
+    </Application.Resources>
+
+</Application>

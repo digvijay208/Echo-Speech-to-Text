@@ -1,0 +1,58 @@
+# =========================
+# Echo — Speech to Text
+# =========================
+
+# --- Local dev / agent state ---
+.claude/
+
+# --- C# / .NET ---
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.pdb
+*.dll
+
+# Per-app exe allowlist (the project output we DO want tracked in some setups).
+# The installer build is the shipped artifact; raw Echo.exe is intermediate.
+# If you ever need to commit a raw Echo.exe, force-add it explicitly.
+
+# Publish output (intermediate, rebuilt per release)
+publish/
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Vite build output ---
+website/frontend/dist/
+
+# --- Editor / OS ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Backups / scratch ---
+*.bak
+*.bak.*
+*~
+murmer.bak.mojibake/
+www.zip
+
+# --- Logs / runtime data ---
+*.log
+website/server/data/waitlist.json
+
+# --- Installer intermediates (staging is rebuilt by build-installer.cmd) ---
+installer/staging/
+installer/*.tmp
+website/server/public/
+!
+!downloads/.gitkeep

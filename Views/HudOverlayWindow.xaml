@@ -1,0 +1,161 @@
+<Window x:Class="Echo.Views.HudOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Echo HUD"
+        Width="420" Height="100"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <SineEase x:Key="EaseInOut" EasingMode="EaseInOut" />
+
+        <!-- Pulsing animation for the recording dot -->
+        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+            <DoubleAnimation
+                Storyboard.TargetName="RecordingDot"
+                Storyboard.TargetProperty="Opacity"
+                From="1.0" To="0.3" Duration="0:0:0.8"
+                AutoReverse="True"
+                EasingFunction="{StaticResource EaseInOut}" />
+            <DoubleAnimation
+                Storyboard.TargetName="RecordingGlow"
+                Storyboard.TargetProperty="Opacity"
+                From="0.6" To="0.0" Duration="0:0:0.8"
+                AutoReverse="True"
+                EasingFunction="{StaticResource EaseInOut}" />
+        </Storyboard>
+
+        <!-- Fade in animation -->
+        <Storyboard x:Key="FadeIn">
+            <DoubleAnimation
+                Storyboard.TargetName="HudContainer"
+                Storyboard.TargetProperty="Opacity"
+                From="0" To="1" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation
+                Storyboard.TargetName="HudTranslate"
+                Storyboard.TargetProperty="Y"
+                From="20" To="0" Duration="0:0:0.25">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </Window.Resources>
+
+    <Grid x:Name="HudContainer" Opacity="0">
+        <Grid.RenderTransform>
+            <TranslateTransform x:Name="HudTranslate" Y="20" />
+        </Grid.RenderTransform>
+
+        <!-- Main HUD Card -->
+        <Border CornerRadius="16" Margin="10"
+                Effect="{StaticResource HudShadow}">
+
+            <!-- Background with blur/glassmorphism effect -->
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#E8181830" Offset="0" />
+                    <GradientStop Color="#E81A1A3E" Offset="0.5" />
+                    <GradientStop Color="#E8161635" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+
+            <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#40FFFFFF" Offset="0" />
+                    <GradientStop Color="#15FFFFFF" Offset="1" />
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+            <Border.BorderThickness>1</Border.BorderThickness>
+
+            <Grid Margin="20,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Recording indicator -->
+                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,14,0">
+                    <!-- Glow behind the dot -->
+                    <Ellipse x:Name="RecordingGlow"
+                             Width="28" Height="28"
+                             Opacity="0">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#80FF4757" Offset="0" />
+                                <GradientStop Color="#00FF4757" Offset="1" />
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <!-- The dot -->
+                    <Ellipse x:Name="RecordingDot"
+                             Width="12" Height="12"
+                             Fill="#FF4757" />
+                    <!-- Transcribing indicator (spinner) -->
+                    <Border x:Name="SpinnerIndicator"
+                            Width="18" Height="18"
+                            CornerRadius="9"
+                            BorderThickness="2.5"
+                            BorderBrush="#7C5CFC"
+                            Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <RotateTransform x:Name="SpinnerRotation" />
+                        </Border.RenderTransform>
+                        <Border.RenderTransformOrigin>0.5,0.5</Border.RenderTransformOrigin>
+                    </Border>
+                    <!-- Done checkmark -->
+                    <TextBlock x:Name="DoneCheck"
+                               Text="?" FontSize="16"
+                               Foreground="#2ED573"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Visibility="Collapsed"
+                               FontWeight="Bold" />
+                </Grid>
+
+                <!-- Status and transcript text -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusLabel"
+                               Text="Listening..."
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#E0E0E0"
+                               FontFamily="Segoe UI Variable, Segoe UI" />
+                    <TextBlock x:Name="TranscriptLabel"
+                               Text=""
+                               FontSize="12"
+                               Foreground="#A0A0B0"
+                               FontFamily="Segoe UI Variable, Segoe UI"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="300"
+                               Margin="0,2,0,0"
+                               Visibility="Collapsed" />
+                </StackPanel>
+
+                <!-- Audio level bars -->
+                <StackPanel x:Name="AudioBars" Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="10,0,0,0">
+                    <Rectangle x:Name="Bar1" Width="3" Height="8" Fill="#7C5CFC" RadiusX="1.5" RadiusY="1.5" VerticalAlignment="Center" Margin="0,0,2,0" />
+                    <Rectangle x:Name="Bar2" Width="3" Height="12" Fill="#7C5CFC" RadiusX="1.5" RadiusY="1.5" VerticalAlignment="Center" Margin="0,0,2,0" />
+                    <Rectangle x:Name="Bar3" Width="3" Height="18" Fill="#7C5CFC" RadiusX="1.5" RadiusY="1.5" VerticalAlignment="Center" Margin="0,0,2,0" />
+                    <Rectangle x:Name="Bar4" Width="3" Height="12" Fill="#7C5CFC" RadiusX="1.5" RadiusY="1.5" VerticalAlignment="Center" Margin="0,0,2,0" />
+                    <Rectangle x:Name="Bar5" Width="3" Height="8" Fill="#7C5CFC" RadiusX="1.5" RadiusY="1.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

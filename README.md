@@ -2,9 +2,13 @@
 
 > On-device voice dictation for Windows. Hold a key, talk, watch the words land anywhere you can type. Zero cloud. Zero telemetry.
 
+[![Latest release](https://img.shields.io/github/release/digvijay208/Echo-Speech-to-Text.svg)](https://github.com/digvijay208/Echo-Speech-to-Text/releases/latest)
+[![Stars](https://img.shields.io/github/stars/digvijay208/Echo-Speech-to-Text.svg)](https://github.com/digvijay208/Echo-Speech-to-Text/stargazers)
+[![Issues](https://img.shields.io/github/issues/digvijay208/Echo-Speech-to-Text.svg)](https://github.com/digvijay208/Echo-Speech-to-Text/issues)
+[![License](https://img.shields.io/github/license/digvijay208/Echo-Speech-to-Text.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)](#requirements)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512bd4)](#requirements)
-[![License](https://img.shields.io/badge/license-MIT-green)](#license)
+[![Repo size](https://img.shields.io/github/repo-size/digvijay208/Echo-Speech-to-Text.svg)](https://github.com/digvijay208/Echo-Speech-to-Text)
 
 ---
 

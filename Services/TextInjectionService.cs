@@ -12,11 +12,13 @@ namespace Echo.Services;
 public static class TextInjectionService
 {
     /// <summary>
-    /// Injects text into the focused window.
+    /// Injects text into the focused window. Returns the task doing the injection
+    /// so callers can await it before performing an Undo (backspace deletion) —
+    /// backspaces sent before the text lands would eat the user's own characters.
     /// </summary>
-    public static void InjectText(string text)
+    public static Task InjectText(string text)
     {
-        if (string.IsNullOrEmpty(text)) return;
+        if (string.IsNullOrEmpty(text)) return Task.CompletedTask;
 
         Logger.Info($"Attempting to inject text ({text.Length} chars): \"{text}\"");
 
@@ -24,7 +26,7 @@ public static class TextInjectionService
         // target (Chrome, Electron editors, etc.). Running it on the UI thread freezes
         // the entire app ? including the HUD overlay ? for the full injection duration.
         // Offload to a worker so the UI stays responsive even if the target is sluggish.
-        Task.Run(() =>
+        return Task.Run(() =>
         {
             try
             {
@@ -41,6 +43,76 @@ public static class TextInjectionService
                 Logger.Error("Text injection failed", ex);
             }
         });
+    }
+
+    /// <summary>
+    /// Deletes the last injected text by sending <paramref name="charCount"/>
+    /// backspace keystrokes. Used by the HUD's Undo button. VK_BACK = 0x08.
+    /// </summary>
+    public static void DeleteLastInjection(int charCount)
+    {
+        if (charCount <= 0) return;
+
+        try
+        {
+            int structSize = Marshal.SizeOf<Win32.INPUT>();
+            const ushort VkBack = 0x08;
+            const int BatchSize = 256; // 512 INPUTs per call — well under the SendInput cap
+
+            for (int offset = 0; offset < charCount; offset += BatchSize)
+            {
+                int count = Math.Min(BatchSize, charCount - offset);
+                var inputs = new Win32.INPUT[count * 2];
+
+                for (int i = 0; i < count; i++)
+                {
+                    inputs[i * 2] = new Win32.INPUT
+                    {
+                        type = Win32.INPUT_KEYBOARD,
+                        u = new Win32.INPUTUNION
+                        {
+                            ki = new Win32.KEYBDINPUT
+                            {
+                                wVk = VkBack,
+                                dwFlags = 0,
+                                time = 0,
+                                dwExtraInfo = IntPtr.Zero
+                            }
+                        }
+                    };
+                    inputs[i * 2 + 1] = new Win32.INPUT
+                    {
+                        type = Win32.INPUT_KEYBOARD,
+                        u = new Win32.INPUTUNION
+                        {
+                            ki = new Win32.KEYBDINPUT
+                            {
+                                wVk = VkBack,
+                                dwFlags = Win32.KEYEVENTF_KEYUP,
+                                time = 0,
+                                dwExtraInfo = IntPtr.Zero
+                            }
+                        }
+                    };
+                }
+
+                uint sent = Win32.SendInput((uint)inputs.Length, inputs, structSize);
+                if (sent != inputs.Length)
+                {
+                    Logger.Warn($"Undo: only {sent}/{inputs.Length} backspaces processed at offset {offset}.");
+                    break;
+                }
+
+                if (offset + BatchSize < charCount)
+                    Thread.Sleep(15); // give chatty targets time to drain the queue
+            }
+
+            Logger.Info($"Undo: sent {charCount} backspace(s).");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Undo (backspace deletion) failed", ex);
+        }
     }
 
     private static bool TrySendInputUnicode(string text)

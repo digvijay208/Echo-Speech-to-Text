@@ -214,42 +214,39 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Model Section -->
+                <!-- STT Engine Section: unified picker for Whisper/Parakeet/Groq + VAD toggle + cloud key + installed list -->
                 <Border Background="{StaticResource Brush.Chassis.Panel}" BorderBrush="#2E3036" BorderThickness="1" CornerRadius="2" Padding="16,14" Margin="0,0,0,14">
                     <StackPanel>
-                        <TextBlock Text="SPEECH RECOGNITION NEURAL MODEL" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,0,0,8" />
-                        <ComboBox x:Name="ModelCombo" Style="{StaticResource Style.SettingsCombo}" ItemContainerStyle="{StaticResource Style.SettingsComboItem}" SelectedIndex="0" SelectionChanged="ModelCombo_SelectionChanged">
-                            <ComboBoxItem Content="Large V3 Multilingual (~2.9 GB) ? Highest Accuracy, 99 Languages" Tag="large-v3" />
-                            <ComboBoxItem Content="Medium Multilingual (~1.4 GB) ? High Accuracy, 99 Languages" Tag="medium" />
-                            <ComboBoxItem Content="Small Multilingual (~465 MB) ? Balanced Multilingual" Tag="small" />
-                            <ComboBoxItem Content="Base Multilingual (~142 MB) ? All Languages" Tag="base" />
-                            <ComboBoxItem Content="Tiny Multilingual (~75 MB) ? Fast Multilingual" Tag="tiny" />
-                            <ComboBoxItem Content="Base English (~142 MB) ? Best for English Only" Tag="base.en" />
-                            <ComboBoxItem Content="Tiny English (~75 MB) ? Fastest English" Tag="tiny.en" />
-                            <ComboBoxItem Content="Small English (~465 MB) ? High English Accuracy" Tag="small.en" />
+                        <TextBlock Text="SPEECH RECOGNITION ENGINE" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,0,0,8" />
+
+                        <ComboBox x:Name="SttEngineCombo" Style="{StaticResource Style.SettingsCombo}" ItemContainerStyle="{StaticResource Style.SettingsComboItem}" SelectionChanged="SttEngineCombo_SelectionChanged">
+                            <ComboBoxItem Content="Whisper Base Multilingual (~142 MB) — 100% offline" />
+                            <ComboBoxItem Content="Whisper Small English (~465 MB) — 100% offline" />
+                            <ComboBoxItem Content="Parakeet TDT 0.6B V3 (~670 MB) — local, fast, English" />
+                            <ComboBoxItem Content="Groq Whisper Large V3 Turbo — free cloud, best accuracy" />
                         </ComboBox>
+                        <TextBlock x:Name="SttEngineStatus" Text="" FontSize="10" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,4,0,0" />
+                        <Button x:Name="DownloadEngineButton" Style="{StaticResource Style.Button.Transport}" Padding="16,8" Margin="0,8,0,0" Visibility="Collapsed" Click="DownloadEngineButton_Click">
+                            <TextBlock x:Name="DownloadEngineButtonText" Text="DOWNLOAD" FontSize="10" FontWeight="Bold" />
+                        </Button>
 
-                        <Grid Margin="0,12,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock x:Name="ModelStatusText" Text="Checking model status..." FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.ReadoutDim}" />
-                                <ProgressBar x:Name="DownloadProgress" Height="4" Margin="0,8,16,0" Foreground="#52B788" Background="#121316" Visibility="Collapsed" />
+                        <Border Background="#0A0A0C" BorderBrush="#2E3036" BorderThickness="1" CornerRadius="2" Padding="10,8" Margin="0,14,0,0">
+                            <StackPanel>
+                                <CheckBox x:Name="EnableVadCheckBox" Content="Auto-stop on silence (Silero VAD v5, ~628 KB bundled)" IsChecked="True" Foreground="{StaticResource Brush.Text.Readout}" FontSize="11" Click="EnableVadCheckBox_Changed" />
+                                <TextBlock Text="When on, push-to-talk ends automatically after ~500ms of silence. When off, the whole held key duration is recorded." FontSize="9.5" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="22,4,0,0" TextWrapping="Wrap" />
                             </StackPanel>
+                        </Border>
 
-                            <Button x:Name="DownloadButton" Grid.Column="1" Style="{StaticResource Style.Button.Transport}" Padding="16,8" Click="DownloadButton_Click">
-                                <TextBlock Text="DOWNLOAD" FontSize="10" FontWeight="Bold" />
-                            </Button>
-                        </Grid>
+                        <TextBlock Text="Groq API key (free, no credit card)" FontSize="10" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,14,0,4" />
+                        <PasswordBox x:Name="GroqApiKeyBox" FontSize="11" Padding="8,6" Background="#0A0A0C" Foreground="{StaticResource Brush.Text.Readout}" BorderBrush="#2E3036" BorderThickness="1" PasswordChanged="GroqApiKeyBox_PasswordChanged" />
+                        <TextBlock FontSize="9.5" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,4,0,0">
+                            <Hyperlink NavigateUri="https://console.groq.com/keys" RequestNavigate="GroqKeyLink_RequestNavigate" Foreground="#52B788">
+                                Get a free Groq API key
+                            </Hyperlink>
+                        </TextBlock>
 
-                        <!-- Downloaded Models List: shows every model on disk so the user can
-                             see at a glance what is installed, regardless of which entry is
-                             selected in the dropdown above. -->
-                        <TextBlock Text="DOWNLOADED MODELS" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,16,0,8" />
-                        <Border Background="#0A0A0C" BorderBrush="#2E3036" BorderThickness="1" CornerRadius="2" Padding="10,8" MaxHeight="180">
+                        <TextBlock Text="INSTALLED MODELS" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,16,0,8" />
+                        <Border Background="#0A0A0C" BorderBrush="#2E3036" BorderThickness="1" CornerRadius="2" Padding="10,8" MaxHeight="160">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel x:Name="DownloadedModelsList" />
                             </ScrollViewer>

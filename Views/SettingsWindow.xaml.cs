@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Navigation;
 using Echo.Services;
+using Echo.Services.Stt;
 
 namespace Echo.Views;
 
@@ -146,10 +148,11 @@ public partial class SettingsWindow : Window
         AudioDeviceCombo.Items.Clear();
         var devices = AudioCaptureService.GetAvailableDevices();
 
-        // Default option
+        // Default option: auto-resolves to the laptop mic array when present,
+        // else the OS default (see AudioCaptureService.FindPreferredDeviceId).
         AudioDeviceCombo.Items.Add(new ComboBoxItem
         {
-            Content = "🎯 Windows Default Microphone",
+            Content = "🎯 Default Microphone (auto)",
             Tag = ""
         });
 
@@ -173,115 +176,7 @@ public partial class SettingsWindow : Window
 
     private void CheckModelStatus()
     {
-        string modelName = GetSelectedModelName();
-        bool downloaded = _modelManager.IsModelDownloaded(modelName);
-
-        if (downloaded)
-        {
-            ModelStatusText.Text = "✅ MODEL READY & INSTALLED";
-            ModelStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(0x52, 0xB7, 0x88));
-            DownloadButton.Content = "INSTALLED ✓";
-            DownloadButton.IsEnabled = false;
-            DownloadProgress.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            ModelStatusText.Text = "MODEL NOT DOWNLOADED";
-            ModelStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(0xE6, 0x39, 0x46));
-            DownloadButton.Content = "DOWNLOAD";
-            DownloadButton.IsEnabled = true;
-            DownloadProgress.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private void ModelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_modelManager != null && ModelStatusText != null)
-        {
-            CheckModelStatus();
-        }
-    }
-
-    private string GetSelectedModelName()
-    {
-        if (ModelCombo?.SelectedItem is ComboBoxItem item && item.Tag is string tag)
-            return tag;
-        return "base.en";
-    }
-
-    private async void DownloadButton_Click(object sender, RoutedEventArgs e)
-    {
-        string modelName = GetSelectedModelName();
-        DownloadButton.IsEnabled = false;
-        DownloadButton.Content = "DOWNLOADING...";
-        DownloadProgress.Visibility = Visibility.Visible;
-        DownloadProgress.IsIndeterminate = false;
-        DownloadProgress.Value = 0;
-
-        // Replace (and dispose) any previous token source instead of leaking one per click.
-        CancelDownload();
-        var cts = new CancellationTokenSource();
-        _downloadCts = cts;
-
-        var progress = new Progress<(long downloaded, long total)>(p =>
-        {
-            // total is -1 when the server sends no Content-Length. Dividing by it produced
-            // NaN/Infinity, and ProgressBar.Value rejects those.
-            if (p.total > 0)
-            {
-                DownloadProgress.IsIndeterminate = false;
-                DownloadProgress.Value = Math.Clamp((double)p.downloaded / p.total * 100, 0, 100);
-                ModelStatusText.Text = $"DOWNLOADING: {p.downloaded / (1024 * 1024)} / {p.total / (1024 * 1024)} MB";
-            }
-            else
-            {
-                DownloadProgress.IsIndeterminate = true;
-                ModelStatusText.Text = $"DOWNLOADING: {p.downloaded / (1024 * 1024)} MB";
-            }
-        });
-
-        try
-        {
-            await _modelManager.DownloadModelAsync(modelName, progress, cts.Token);
-
-            ModelStatusText.Text = "✅ MODEL READY & INSTALLED";
-            ModelStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(0x52, 0xB7, 0x88));
-            DownloadButton.Content = "INSTALLED ✓";
-            DownloadProgress.Visibility = Visibility.Collapsed;
-
-            string modelPath = _modelManager.GetModelPath(modelName);
-            _onModelReady?.Invoke(modelPath);
-            PopulateDownloadedModelsList();
-        }
-        catch (OperationCanceledException)
-        {
-            ModelStatusText.Text = "DOWNLOAD CANCELLED";
-            DownloadButton.Content = "DOWNLOAD";
-            DownloadButton.IsEnabled = true;
-            DownloadProgress.Visibility = Visibility.Collapsed;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"Model download failed: {modelName}", ex);
-            ModelStatusText.Text = $"� ERROR: {ex.Message}";
-            ModelStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(0xE6, 0x39, 0x46));
-            DownloadButton.Content = "RETRY";
-            DownloadButton.IsEnabled = true;
-            DownloadProgress.Visibility = Visibility.Collapsed;
-        }
-        finally
-        {
-            DownloadProgress.IsIndeterminate = false;
-            if (ReferenceEquals(_downloadCts, cts))
-            {
-                _downloadCts = null;
-                cts.Dispose();
-            }
-        }
+        UpdateSttEngineStatus();
     }
 
     private void HotkeyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -307,5 +202,179 @@ public partial class SettingsWindow : Window
     {
         CancelDownload();
         Hide();
+    }
+
+    // ========================================================================
+    // STT Engine, VAD, and Groq settings
+    // ========================================================================
+
+    private EchoSettings? _settings;
+    private GroqProvider? _groqProvider;
+    private Func<bool>? _vadAvailable;
+    private Action? _onSttEngineChanged;
+
+    /// <summary>
+    /// Called by App.xaml.cs to hand the window the live settings object
+    /// (so changes here are visible to the rest of the app) and the shared
+    /// GroqProvider (so we can hand it the key without rebuilding it).
+    /// </summary>
+    public void BindSettings(EchoSettings settings, GroqProvider? groqProvider, Func<bool> vadAvailable, Action onSttEngineChanged)
+    {
+        _settings = settings;
+        _groqProvider = groqProvider;
+        _vadAvailable = vadAvailable;
+        _onSttEngineChanged = onSttEngineChanged;
+
+        // Hydrate controls from persisted values. The dropdown order in
+        // XAML must stay in sync with the SttEngine enum:
+        //   0 WhisperBase, 1 WhisperSmallEn, 2 Parakeet, 3 Groq.
+        SttEngineCombo.SelectedIndex = (int)settings.Engine;
+        EnableVadCheckBox.IsChecked = settings.VadEnabled;
+        GroqApiKeyBox.Password = settings.GroqApiKey;
+
+        UpdateSttEngineStatus();
+    }
+
+    private void SttEngineCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settings == null) return;
+        _settings.Engine = (EchoSettings.SttEngine)SttEngineCombo.SelectedIndex;
+        _settings.Save();
+        UpdateSttEngineStatus();
+        _onSttEngineChanged?.Invoke();
+    }
+
+    private void UpdateSttEngineStatus()
+    {
+        if (_settings == null) return;
+
+        DownloadEngineButton.Visibility = Visibility.Collapsed;
+        GroqApiKeyBox.IsEnabled = true;
+
+        switch (_settings.Engine)
+        {
+            case EchoSettings.SttEngine.WhisperBase:
+                SttEngineStatus.Text = "Whisper Base: ~142 MB, runs on any CPU, multilingual.";
+                break;
+
+            case EchoSettings.SttEngine.WhisperSmallEn:
+                if (_modelManager.IsModelDownloaded("small.en"))
+                    SttEngineStatus.Text = "Whisper Small (English): installed. High accuracy on English.";
+                else
+                {
+                    SttEngineStatus.Text = "Whisper Small (English): not installed (~465 MB).";
+                    ShowDownloadButton("DOWNLOAD WHISPER SMALL (~465 MB)", isParakeet: false);
+                }
+                break;
+
+            case EchoSettings.SttEngine.Parakeet:
+                if (_modelManager.IsParakeetDownloaded())
+                    SttEngineStatus.Text = "Parakeet TDT V3: installed. Fast and accurate on English.";
+                else
+                {
+                    SttEngineStatus.Text = "Parakeet TDT V3: not installed (~670 MB). Faster than Whisper, English-only.";
+                    ShowDownloadButton("DOWNLOAD PARAKEET V3 (~670 MB)", isParakeet: true);
+                }
+                break;
+
+            case EchoSettings.SttEngine.Groq:
+                GroqApiKeyBox.IsEnabled = true;
+                if (!string.IsNullOrEmpty(_settings.GroqApiKey))
+                    SttEngineStatus.Text = "Groq Whisper Large V3 Turbo: API key set. Free tier, best accuracy.";
+                else
+                {
+                    SttEngineStatus.Text = "Groq Whisper Large V3 Turbo: paste your free API key below to enable.";
+                    GroqApiKeyBox.IsEnabled = true;
+                }
+                break;
+        }
+    }
+
+    private void ShowDownloadButton(string label, bool isParakeet)
+    {
+        DownloadEngineButton.Visibility = Visibility.Visible;
+        DownloadEngineButtonText.Text = label;
+        DownloadEngineButton.Tag = isParakeet;
+    }
+
+    private async void DownloadEngineButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_modelManager == null) return;
+        bool isParakeet = DownloadEngineButton.Tag is bool b && b;
+
+        DownloadEngineButton.IsEnabled = false;
+        DownloadEngineButtonText.Text = "DOWNLOADING...";
+
+        var progress = new Progress<(long downloaded, long total)>(p =>
+        {
+            if (p.total > 0)
+                DownloadEngineButtonText.Text =
+                    $"DOWNLOADING {p.downloaded / (1024 * 1024)} / {p.total / (1024 * 1024)} MB";
+        });
+
+        try
+        {
+            if (isParakeet)
+                await _modelManager.DownloadParakeetAsync(progress);
+            else
+                await _modelManager.DownloadModelAsync("small.en", progress);
+
+            Logger.Info(isParakeet ? "Parakeet download complete." : "Whisper Small download complete.");
+            DownloadEngineButtonText.Text = "INSTALLED ✓";
+            PopulateDownloadedModelsList();
+            _onSttEngineChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Engine download failed", ex);
+            DownloadEngineButtonText.Text = "RETRY";
+            DownloadEngineButton.IsEnabled = true;
+        }
+        UpdateSttEngineStatus();
+    }
+
+    private void EnableVadCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_settings == null) return;
+        _settings.VadEnabled = EnableVadCheckBox.IsChecked == true;
+        _settings.Save();
+        Logger.Info($"VAD enabled = {_settings.VadEnabled}");
+    }
+
+    private void GroqApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (_settings == null) return;
+        _settings.GroqApiKey = GroqApiKeyBox.Password;
+        _settings.Save();
+        if (!string.IsNullOrEmpty(_settings.GroqApiKey) && _groqProvider != null)
+        {
+            try
+            {
+                _groqProvider.Load(_settings.GroqApiKey);
+                Logger.Info("Groq provider loaded.");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Groq key invalid: {ex.Message}");
+            }
+        }
+        UpdateSttEngineStatus();
+    }
+
+    private void GroqKeyLink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = e.Uri.AbsoluteUri,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Could not open Groq signup URL: {ex.Message}");
+        }
+        e.Handled = true;
     }
 }

@@ -18,6 +18,13 @@ public sealed class AudioCaptureService : IDisposable
     private readonly object _lock = new();
     private bool _isRecording;
 
+    // Running peak for the live VAD stream AGC. The full-buffer path peak-normalizes
+    // in StopRecording, but the VAD consumes chunks in real time and was being fed
+    // quiet raw mic audio (peaks ~0.03-0.09) that rarely crossed Silero's 0.5 speech
+    // threshold — so VAD reported "0 ms of speech" and dropped every utterance before
+    // it ever reached an STT engine.
+    private float _vadRunningPeak;
+
     public bool IsRecording => _isRecording;
 
     /// <summary>
@@ -31,6 +38,15 @@ public sealed class AudioCaptureService : IDisposable
     public event Action<float>? AudioLevelChanged;
 
     /// <summary>
+    /// Raised on every captured buffer after it has been resampled to
+    /// 16 kHz mono float32. Subscribers (SileroVadService) process chunks
+    /// incrementally instead of waiting for the full recording to stop.
+    /// Always fired on the audio capture thread; subscribers must marshal
+    /// to the UI thread if they touch WPF.
+    /// </summary>
+    public event Action<float[]>? ChunkAvailable;
+
+    /// <summary>
     /// Starts capturing audio from the microphone.
     /// </summary>
     public void StartRecording()
@@ -40,6 +56,11 @@ public sealed class AudioCaptureService : IDisposable
             if (_isRecording) return;
 
             _audioBuffer = new MemoryStream();
+
+            // Fresh AGC state each recording: a loud transient (click, pop) in a
+            // previous clip would otherwise hold the running peak high and suppress
+            // gain for the first seconds of the next one.
+            _vadRunningPeak = 0f;
 
             try
             {
@@ -52,7 +73,13 @@ public sealed class AudioCaptureService : IDisposable
                 }
                 else
                 {
-                    device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+                    // Prefer the physical laptop mic array. The OS default is
+                    // often a virtual device (DroidCam, Steam Streaming) that is
+                    // useless for dictation.
+                    string? preferredId = FindPreferredDeviceId(enumerator);
+                    device = preferredId != null
+                        ? enumerator.GetDevice(preferredId)
+                        : enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
                 }
 
                 Logger.Info($"Opening WASAPI audio capture on device: '{device.FriendlyName}' (Format: {device.AudioClient.MixFormat})");
@@ -170,6 +197,7 @@ public sealed class AudioCaptureService : IDisposable
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
         float? level = null;
+        float[]? resampledChunk = null;
 
         lock (_lock)
         {
@@ -178,7 +206,14 @@ public sealed class AudioCaptureService : IDisposable
                 _audioBuffer.Write(e.Buffer, 0, e.BytesRecorded);
 
                 if (_captureFormat != null)
+                {
                     level = CalculateRms(e.Buffer, e.BytesRecorded, _captureFormat);
+                    // Resample every incoming buffer to 16 kHz mono for the
+                    // VAD stream. The same buffer is also captured into
+                    // _audioBuffer so StopRecording() still returns the
+                    // full utterance for backwards-compatible callers.
+                    resampledChunk = ResampleBufferTo16kMono(e.Buffer, e.BytesRecorded, _captureFormat);
+                }
             }
         }
 
@@ -187,6 +222,11 @@ public sealed class AudioCaptureService : IDisposable
         // deadlocks the app (audio thread waits on UI, UI waits on _lock).
         if (level.HasValue)
             AudioLevelChanged?.Invoke(level.Value);
+        if (resampledChunk != null && resampledChunk.Length > 0)
+        {
+            ApplyStreamGain(resampledChunk, ref _vadRunningPeak);
+            ChunkAvailable?.Invoke(resampledChunk);
+        }
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -195,6 +235,20 @@ public sealed class AudioCaptureService : IDisposable
         {
             Logger.Error("Recording stopped with exception", e.Exception);
         }
+    }
+
+    /// <summary>
+    /// Converts any captured PCM/IEEE Float buffer to 16kHz mono float[] samples.
+    /// </summary>
+    private static float[] ResampleBufferTo16kMono(byte[] rawBytes, int bytesRecorded, WaveFormat format)
+    {
+        // The full-buffer path uses the exact same code, so reuse it. Slice
+        // the byte[] to the actual BytesRecorded count because the input
+        // buffer can be larger than the data filled in.
+        if (bytesRecorded == rawBytes.Length) return ResampleTo16kMono(rawBytes, format);
+        var slice = new byte[bytesRecorded];
+        Buffer.BlockCopy(rawBytes, 0, slice, 0, bytesRecorded);
+        return ResampleTo16kMono(slice, format);
     }
 
     /// <summary>
@@ -302,6 +356,37 @@ public sealed class AudioCaptureService : IDisposable
     }
 
     /// <summary>
+    /// Adaptive gain for the live VAD stream. The full-buffer path peak-normalizes
+    /// in <see cref="StopRecording"/>, but the VAD consumes chunks in real time and
+    /// was being fed quiet raw mic audio (peaks ~0.03-0.09) that rarely crossed
+    /// Silero's 0.5 speech threshold. Scale each chunk by a running peak with decay
+    /// so gain follows the loudest recent speech without clipping.
+    /// </summary>
+    private static void ApplyStreamGain(float[] samples, ref float runningPeak)
+    {
+        if (samples.Length == 0) return;
+
+        float chunkPeak = 0f;
+        for (int i = 0; i < samples.Length; i++)
+        {
+            float a = Math.Abs(samples[i]);
+            if (a > chunkPeak) chunkPeak = a;
+        }
+
+        // Decay slowly so one loud word doesn't permanently slam the gain down.
+        runningPeak = Math.Max(chunkPeak, runningPeak * 0.98f);
+        if (runningPeak <= 0f) return;
+
+        const float TargetPeak = 0.95f;
+        const float MaxGain = 30f;
+        float gain = Math.Min(TargetPeak / runningPeak, MaxGain);
+        if (gain <= 1.01f) return;
+
+        for (int i = 0; i < samples.Length; i++)
+            samples[i] = Math.Clamp(samples[i] * gain, -1f, 1f);
+    }
+
+    /// <summary>
     /// Peak-normalizes the samples in place, and logs the measured level.
     /// Laptop mic arrays and USB webcams commonly peak around 0.03-0.15. Whisper handles
     /// quiet audio badly: it returns [BLANK_AUDIO] or invents a fluent sentence that was
@@ -390,6 +475,25 @@ public sealed class AudioCaptureService : IDisposable
     }
 
     /// <summary>
+    /// Finds the capture endpoint this app should use when the user has not
+    /// picked one explicitly: the physical "Microphone Array" (Intel Smart
+    /// Sound) laptop mic when present, else null (caller falls back to the
+    /// OS default). Matches by name hint so it stays robust to device-ID
+    /// churn across reboots/driver updates.
+    /// </summary>
+    private const string PreferredDeviceNameHint = "microphone array";
+
+    private static string? FindPreferredDeviceId(MMDeviceEnumerator enumerator)
+    {
+        foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+        {
+            if (endpoint.FriendlyName.Contains(PreferredDeviceNameHint, StringComparison.OrdinalIgnoreCase))
+                return endpoint.ID;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Returns the list of all available active audio recording devices with their MMDevice ID and Friendly Name.
     /// </summary>
     public static List<(string Id, string Name, bool IsDefault)> GetAvailableDevices()
@@ -400,11 +504,15 @@ public sealed class AudioCaptureService : IDisposable
             using var enumerator = new MMDeviceEnumerator();
             var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
             string defaultId = defaultDevice?.ID ?? "";
+            string? preferredId = FindPreferredDeviceId(enumerator);
 
             var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
             foreach (var endpoint in endpoints)
             {
-                bool isDefault = endpoint.ID == defaultId;
+                // Mark the app-preferred device (Mic Array) as default so the
+                // Settings UI auto-selects it and labels it "(Default)" instead
+                // of whatever the OS default happens to be (e.g. DroidCam).
+                bool isDefault = endpoint.ID == (preferredId ?? defaultId);
                 devices.Add((endpoint.ID, endpoint.FriendlyName, isDefault));
             }
         }

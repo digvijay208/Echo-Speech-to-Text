@@ -7,7 +7,7 @@ namespace Echo.Services;
 /// Wraps Whisper.net for on-device speech-to-text transcription.
 /// Pre-initializes a multi-threaded Whisper processor for sub-second latency.
 /// </summary>
-public sealed class TranscriptionService : IDisposable
+public sealed class TranscriptionService : IDisposable, Stt.ISttProvider
 {
     private WhisperFactory? _factory;
     private WhisperProcessor? _processor;
@@ -26,6 +26,17 @@ public sealed class TranscriptionService : IDisposable
     private bool _disposed;
 
     public bool IsModelLoaded => _isLoaded;
+
+    // ISttProvider surface — lets this class be plugged into the router
+    // directly without needing the WhisperSttProvider wrapper. Both paths
+    // (the legacy DictationService direct call and the new SttRouter)
+    // share the same underlying processor.
+    string Stt.ISttProvider.Name => "Whisper (legacy)";
+    string Stt.ISttProvider.Tier => "local";
+    bool Stt.ISttProvider.IsLoaded => _isLoaded;
+    void Stt.ISttProvider.Load(string modelPathOrKey) => LoadModel(modelPathOrKey);
+    Task<string> Stt.ISttProvider.TranscribeAsync(float[] samples16k, CancellationToken cancellationToken)
+        => TranscribeAsync(samples16k);
 
     /// <summary>
     /// Path of the model currently held in memory, or null if none.

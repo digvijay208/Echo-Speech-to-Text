@@ -2,10 +2,16 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Echo.Controls"
-        Title="ECHO TC-80 | 1980s Speech Recorder &amp; Dictation"
-        Width="880" Height="680"
-        MinWidth="760" MinHeight="560"
-        Background="{StaticResource Brush.Chassis.BodyDark}"
+        Title="Echo — Home"
+        Icon="../Assets/Echo.ico"
+        Width="1600" Height="900"
+        MinWidth="1280" MinHeight="760"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        AllowsTransparency="False"
+        Background="{StaticResource Brush.Light.Page}"
+        Foreground="{StaticResource Brush.Light.Text}"
+        FontFamily="Segoe UI, Inter, Arial"
         WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
 
@@ -20,25 +26,17 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <!-- 0: Brushed Metal Header Strip -->
-            <RowDefinition Height="46" />
-            <!-- 1: Milled Seam -->
-            <RowDefinition Height="2" />
-            <!-- 2: Analog Meter & Transport Deck -->
-            <RowDefinition Height="140" />
-            <!-- 3: Milled Seam -->
-            <RowDefinition Height="2" />
-            <!-- 4: Main Content Bay (History & Dictionary) -->
+            <!-- 0: Titlebar -->
+            <RowDefinition Height="44" />
+            <!-- 1: Body (sidebar + main + rail) -->
             <RowDefinition Height="*" />
-            <!-- 5: Bottom Status Bar -->
-            <RowDefinition Height="28" />
         </Grid.RowDefinitions>
 
-        <!-- ������������������������������������������������������������������ -->
-        <!-- ROW 0: BRUSHED ALUMINUM TOP DECK STRIP                             -->
-        <!-- ������������������������������������������������������������������ -->
-        <Border Grid.Row="0" Background="{StaticResource Brush.Chassis.BrushedMetal}" Padding="16,0">
-            <Grid VerticalAlignment="Center">
+        <!-- ============================================================ -->
+        <!-- ROW 0: TITLEBAR                                                -->
+        <!-- ============================================================ -->
+        <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="0,0,0,1" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -46,479 +44,686 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Equipment Brand & Model -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="ECHO"
-                               FontFamily="Segoe UI, Arial"
-                               FontWeight="Black"
-                               FontSize="16"
-                               Foreground="#1B1C20"
-                               Margin="0,0,8,0" />
-                    <Border Background="#22242B" CornerRadius="2" Padding="6,2" VerticalAlignment="Center" Margin="0,0,10,0">
-                        <TextBlock Text="TC-80"
-                                   FontFamily="Consolas, monospace"
-                                   FontWeight="Bold"
-                                   FontSize="11"
-                                   Foreground="#F0F0F2" />
+                <!-- Brand mark + wordmark (sits over the sidebar) -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <Border Width="28" Height="28" CornerRadius="8" Margin="0,0,10,0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#6366F1" Offset="0" />
+                                <GradientStop Color="#8B5CF6" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <!-- Logo mark: waveform from brand artwork (white on gradient tile) -->
+                        <Image Source="../Assets/echo-mark-white.png" Width="16" Height="16" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
                     </Border>
-                    <TextBlock Text="FIELD SPEECH TRANSCRIBER"
-                               FontFamily="Segoe UI"
-                               FontWeight="Bold"
-                               FontSize="9"
-                               Foreground="#555760"
-                               VerticalAlignment="Center" />
+                    <TextBlock Text="Echo" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" VerticalAlignment="Center" />
                 </StackPanel>
 
-                <!-- Mechanical Tape Counter -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
-                    <TextBlock Text="TAPE COUNTER"
-                               FontFamily="Segoe UI"
-                               FontWeight="Bold"
-                               FontSize="9"
-                               Foreground="#444650"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0" />
-                    <Border Background="#0A0B0D" BorderBrush="#2C2E35" BorderThickness="1" CornerRadius="2" Padding="8,3">
-                        <TextBlock x:Name="TapeCounterText"
-                                   Text="00:00.0"
-                                   FontFamily="Consolas, monospace"
-                                   FontWeight="Bold"
-                                   FontSize="13"
-                                   Foreground="#E2E2E6" />
+                <!-- Center: dictation status (transports live here) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- Tape-counter (00:00.0) -->
+                    <Border Background="{StaticResource Brush.Slate.100}" CornerRadius="6" Padding="8,3" VerticalAlignment="Center">
+                        <TextBlock x:Name="TapeCounterText" Text="00:00.0" FontFamily="Consolas, monospace" FontWeight="Bold" FontSize="12" Foreground="{StaticResource Brush.Light.Text}" />
                     </Border>
+                    <Ellipse x:Name="PowerLed" Width="7" Height="7" Fill="{StaticResource Brush.Indicator.Power}" Margin="10,0,6,0" VerticalAlignment="Center" />
+                    <TextBlock x:Name="DeckStatusLabel" Text="STANDBY / READY" FontFamily="Consolas, monospace" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextMuted}" VerticalAlignment="Center" />
+                    <TextBlock Text="  •  MODEL: " FontFamily="Consolas, monospace" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="ActiveModelLabel" Text="—" FontFamily="Consolas, monospace" FontSize="11" FontWeight="Bold" Foreground="#E09F3E" VerticalAlignment="Center" />
+
+                    <!-- Manual record / stop transport (hidden when sidebar nav is in use) -->
+                    <Button x:Name="RecordButton" Style="{StaticResource Style.Button.Primary}" Margin="14,0,0,0" Padding="10,4" Click="RecordButton_Click" ToolTip="Start dictation">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="RecButtonLed" Width="7" Height="7" Fill="{StaticResource Brush.Rose.500}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="RecButtonLabel" Text="● REC" FontSize="11" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="StopButton" Style="{StaticResource Style.Button.Ghost}" Margin="6,0,0,0" Padding="10,4" IsEnabled="False" Click="StopButton_Click" ToolTip="Stop dictation">
+                        <TextBlock Text="■ STOP" FontSize="11" FontWeight="Bold" />
+                    </Button>
                 </StackPanel>
 
-                <!-- Settings Button (Ctrl+,) -->
-                <Button Grid.Column="3"
-                        Style="{StaticResource Style.Button.Transport}"
-                        Padding="10,6"
-                        Click="SettingsButton_Click"
-                        ToolTip="Settings (Ctrl+,)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="⚙ SETTINGS" FontSize="10" FontWeight="Bold" />
-                    </StackPanel>
-                </Button>
+                <!-- Right: notification + window controls -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Button Style="{StaticResource Style.TitlebarIconButton}" ToolTip="Notifications">
+                        <TextBlock Text="🔔" FontSize="13" />
+                    </Button>
+                </StackPanel>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Button x:Name="MinimizeButton" Style="{StaticResource Style.TitlebarIconButton}" Click="MinimizeButton_Click" ToolTip="Minimize">
+                        <TextBlock Text="—" FontSize="13" FontWeight="Bold" />
+                    </Button>
+                    <Button x:Name="MaximizeButton" Style="{StaticResource Style.TitlebarIconButton}" Click="MaximizeButton_Click" ToolTip="Maximize">
+                        <TextBlock Text="▢" FontSize="12" />
+                    </Button>
+                    <Button x:Name="CloseButton" Style="{StaticResource Style.TitlebarIconButton}" Click="CloseButton_Click" ToolTip="Close (minimize to tray)">
+                        <TextBlock Text="✕" FontSize="12" />
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Seam 1 -->
-        <Border Grid.Row="1" Style="{StaticResource Style.Panel.Seam}" />
+        <!-- ============================================================ -->
+        <!-- ROW 1: BODY — SIDEBAR + MAIN + RAIL                           -->
+        <!-- ============================================================ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="300" />
+            </Grid.ColumnDefinitions>
 
-        <!-- ������������������������������������������������������������������ -->
-        <!-- ROW 2: INSTRUMENTATION & TRANSPORT DECK                            -->
-        <!-- ������������������������������������������������������������������ -->
-        <Border Grid.Row="2" Background="{StaticResource Brush.Chassis.Panel}" Padding="16,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <!-- VU Meter Bay -->
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="20" />
-                    <!-- Transport Deck Buttons & Status -->
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <!-- Left: Analog VU Meter -->
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <controls:AnalogVuMeter x:Name="VuMeter" />
-                </StackPanel>
-
-                <!-- Right: Mechanical Transport Deck -->
-                <Grid Grid.Column="2" VerticalAlignment="Center">
+            <!-- ─── LEFT SIDEBAR ─────────────────────────────────────── -->
+            <Border Grid.Column="0" Background="{StaticResource Brush.Light.Sidebar}" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="0,0,1,0">
+                <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="12" />
+                        <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- Transport Push Buttons -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal">
-                        <!-- Manual Record / Dictate Toggle -->
-                        <Button x:Name="RecordButton"
-                                Style="{StaticResource Style.Button.Record}"
-                                Width="120" Height="42"
-                                Margin="0,0,10,0"
-                                Click="RecordButton_Click">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Ellipse x:Name="RecButtonLed" Width="8" Height="8" Fill="#FF4D4D" Margin="0,0,8,0" VerticalAlignment="Center" />
-                                <TextBlock x:Name="RecButtonLabel" Text="� REC" FontSize="12" FontWeight="Bold" />
+                    <StackPanel Grid.Row="0" Margin="0,18,0,0">
+                        <ToggleButton x:Name="NavHomeBtn"     Content="Home"        Tag="&#xE80F;" Style="{StaticResource Style.SidebarNavItem}" IsChecked="True"  Click="NavHomeBtn_Click" />
+                        <ToggleButton x:Name="NavDictationBtn" Content="Dictation"   Tag="&#xE720;" Style="{StaticResource Style.SidebarNavItem}" IsChecked="False" Click="NavDictationBtn_Click" />
+                        <ToggleButton x:Name="NavHistoryBtn"   Content="History"     Tag="&#xE81C;" Style="{StaticResource Style.SidebarNavItem}" IsChecked="False" Click="NavHistoryBtn_Click" />
+                        <ToggleButton x:Name="NavStylesBtn"    Content="Styles"      Tag="&#xE790;" Style="{StaticResource Style.SidebarNavItem}" IsChecked="False" Click="NavStylesBtn_Click" />
+                        <ToggleButton x:Name="NavTransformsBtn" Content="Transforms"  Tag="&#xE794;" Style="{StaticResource Style.SidebarNavItem}" IsChecked="False" Click="NavTransformsBtn_Click" />
+                        <ToggleButton x:Name="NavSettingsBtn"  Content="Settings"    Tag="&#xE713;" Style="{StaticResource Style.SidebarNavItem}" IsChecked="False" Click="NavSettingsBtn_Click" />
+                    </StackPanel>
+
+                    <!-- Bottom: Echo on mobile promo card -->
+                    <Border Grid.Row="1" Margin="14,0,14,16" Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="14" Padding="14">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="Echo on mobile" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" />
+                                <TextBlock Text="📱" FontSize="14" HorizontalAlignment="Right" />
+                            </Grid>
+                            <TextBlock Text="Take Echo on the go with your iPhone or Android." FontSize="12" Foreground="{StaticResource Brush.Light.TextDim}" TextWrapping="Wrap" LineHeight="16" />
+                            <Button Style="{StaticResource Style.Button.Primary}" Margin="0,10,0,0" HorizontalAlignment="Stretch">
+                                <TextBlock Text="Get the app" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ─── MAIN CONTENT ─────────────────────────────────────── -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Background="{StaticResource Brush.Light.Page}">
+                <Grid>
+                    <!-- VIEW: Home (default) — greeting + hero + recent -->
+                    <Grid x:Name="HomeView" Margin="36,28,36,28">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Greeting row -->
+                        <Grid Grid.Row="0" Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Hey Digvijay, get back into the flow 👋" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <TextBlock Text="Press " FontSize="14" Foreground="{StaticResource Brush.Light.TextDim}" VerticalAlignment="Center" />
+                                    <Border Style="{StaticResource KbdPill}" Margin="0,0,4,0"><TextBlock Text="Ctrl" /></Border>
+                                    <TextBlock Text=" + " FontSize="14" Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                    <Border Style="{StaticResource KbdPill}" Margin="4,0,0,0"><TextBlock Text="Win" /></Border>
+                                    <TextBlock Text=" to start dictating anywhere." FontSize="14" Foreground="{StaticResource Brush.Light.TextDim}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
                             </StackPanel>
-                        </Button>
+                            <Button Grid.Column="1" x:Name="QuickDictationBtn" Style="{StaticResource Style.Button.Ghost}" Click="QuickDictationBtn_Click" Padding="14,8" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🎙" FontSize="13" Foreground="{StaticResource Brush.Indigo.500}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Quick Dictation" Margin="6,0,6,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="▾" FontSize="10" Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
 
-                        <!-- Stop Button -->
-                        <Button x:Name="StopButton"
-                                Style="{StaticResource Style.Button.Transport}"
-                                Width="90" Height="42"
-                                Margin="0,0,16,0"
-                                IsEnabled="False"
-                                Click="StopButton_Click">
-                            <TextBlock Text="■ STOP" FontSize="11" FontWeight="Bold" />
-                        </Button>
+                        <!-- Hero banner -->
+                        <Border Grid.Row="1" Height="180" CornerRadius="16" ClipToBounds="True" Margin="0,0,0,24">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.7">
+                                    <GradientStop Color="#1B1B3A" Offset="0.0" />
+                                    <GradientStop Color="#2B2150" Offset="0.35" />
+                                    <GradientStop Color="#5A3A8A" Offset="0.70" />
+                                    <GradientStop Color="#C0744B" Offset="1.0" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="0.9*" />
+                                </Grid.ColumnDefinitions>
 
-                        <!-- Hotkey Info Callout Box -->
-                        <Border Background="#141518" BorderBrush="#2C2E35" BorderThickness="1" CornerRadius="2" Padding="12,6" VerticalAlignment="Center">
+                                <!-- Left text block -->
+                                <StackPanel Grid.Column="0" Margin="32,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Foreground="White" FontSize="26" FontWeight="SemiBold" LineHeight="32">
+                                        <Run Text="Make Echo sound like " />
+                                        <Run Text="you" FontStyle="Italic" FontFamily="Georgia, 'Times New Roman', serif" Foreground="#C7D2FE" />
+                                    </TextBlock>
+                                    <TextBlock Text="Set up writing styles and vocabulary to get better results." Margin="0,8,0,0" Foreground="#DDD6FE" FontSize="14" TextWrapping="Wrap" MaxWidth="340" />
+                                    <Button Style="{StaticResource Style.Button.Primary}" Margin="0,16,0,0" Padding="16,8" HorizontalAlignment="Left" Background="#6366F1">
+                                        <TextBlock Text="Set up now" />
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- Right: inline-vector sunset / mountains / person -->
+                                <Viewbox Grid.Column="1" Stretch="Uniform" Margin="0,0,0,0" HorizontalAlignment="Right">
+                                    <Grid Width="520" Height="180">
+                                        <Canvas>
+                                            <!-- Sky gradient already on the border. Add clouds, sun, ridges. -->
+                                            <Path Canvas.Left="0" Canvas.Top="0" Width="520" Height="180" Stretch="Fill" Data="M0,0 L520,0 L520,180 L0,180 Z" Fill="Transparent" />
+
+                                            <!-- Distant sun glow -->
+                                            <Ellipse Canvas.Left="290" Canvas.Top="42" Width="120" Height="120" Fill="#FFD9A8" Opacity="0.18" />
+                                            <Ellipse Canvas.Left="330" Canvas.Top="58" Width="60" Height="60"  Fill="#FFE1BD" Opacity="0.95" />
+
+                                            <!-- Far ridge -->
+                                            <Path Canvas.Left="0" Canvas.Top="0" Width="520" Height="180" Stretch="Fill"
+                                                  Fill="#1F1A45" Opacity="0.7"
+                                                  Data="M0,128 L70,98 L130,118 L200,90 L260,112 L320,98 L380,118 L450,100 L520,112 L520,180 L0,180 Z" />
+
+                                            <!-- Near ridge -->
+                                            <Path Canvas.Left="0" Canvas.Top="0" Width="520" Height="180" Stretch="Fill"
+                                                  Fill="#100B2E"
+                                                  Data="M0,150 L60,124 L120,148 L190,118 L260,142 L330,120 L400,150 L460,128 L520,148 L520,180 L0,180 Z" />
+
+                                            <!-- Person silhouette, sitting -->
+                                            <Path Canvas.Left="312" Canvas.Top="100"
+                                                  Fill="#0A0822"
+                                                  Data="M0,4 C0,1.5 1.5,0 4,0 C6.5,0 8,1.5 8,4 C8,6.5 6.5,8 4,8 C1.5,8 0,6.5 0,4 Z M-2,8 Q4,18 10,8 L12,28 L-4,28 Z" />
+                                            <Path Canvas.Left="310" Canvas.Top="120"
+                                                  Fill="#0A0822"
+                                                  Data="M-2,0 L4,-2 L6,0 L8,18 L0,20 Z" />
+                                        </Canvas>
+                                    </Grid>
+                                </Viewbox>
+                            </Grid>
+                        </Border>
+
+                        <!-- Recent dictations header -->
+                        <Grid Grid.Row="2" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Recent Dictations" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" />
+                            <Button Grid.Column="1" Style="{StaticResource Style.TitlebarIconButton}" Width="32" Height="32" ToolTip="Search dictations">
+                                <TextBlock Text="🔍" FontSize="13" />
+                            </Button>
+                        </Grid>
+
+                        <!-- Recent dictations list (overlays HistoryViewPanel — single source of truth) -->
+                        <Border Grid.Row="3" Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="14">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="36" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <!-- Search row inside the card -->
+                                <Grid Grid.Row="0" Margin="14,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="{StaticResource Brush.Slate.100}" CornerRadius="8" Padding="10,0" VerticalAlignment="Center" Height="30">
+                                        <Grid>
+                                            <TextBlock x:Name="HistorySearchPlaceholder" Text="🔍  Search past transcriptions &amp; corrections..." FontSize="12" Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                            <TextBox x:Name="HistorySearchBox" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brush.Light.Text}" FontSize="12" VerticalAlignment="Center" TextChanged="HistorySearchBox_TextChanged" />
+                                        </Grid>
+                                    </Border>
+                                    <Button Grid.Column="1" x:Name="TabHistoryBtn" Margin="8,0,0,0" Style="{StaticResource Style.Button.Ghost}" Click="TabHistoryBtn_Click" ToolTip="Clear all dictations">
+                                        <TextBlock Text="CLEAR LOG" FontSize="10" FontWeight="Bold" />
+                                    </Button>
+                                    <!-- Legacy tab-indicator stubs (no longer visually rendered) -->
+                                    <Button x:Name="TabDictionaryBtn" Visibility="Collapsed" Click="TabDictionaryBtn_Click" />
+                                </Grid>
+
+                                <ListBox x:Name="HistoryListBox" Grid.Row="1" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionMode="Single" VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="Transparent" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="0,0,0,1" Padding="14,12">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="64" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- Time -->
+                                                    <TextBlock Grid.Column="0" Text="{Binding TimeFormatted}" FontFamily="Consolas, monospace" FontSize="12" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextDim}" VerticalAlignment="Top" />
+
+                                                    <!-- Reaction emoji (or recording dot) -->
+                                                    <Border Grid.Column="1" Width="28" VerticalAlignment="Top" Margin="0,2,0,0">
+                                                        <TextBlock Text="😎" FontSize="16" />
+                                                    </Border>
+
+                                                    <!-- Transcript + meta -->
+                                                    <StackPanel Grid.Column="2" Margin="6,0,0,0">
+                                                        <TextBlock Text="{Binding FinalText}" FontSize="14" Foreground="{StaticResource Brush.Light.Text}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                                        <TextBlock Margin="0,3,0,0" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextFaint}">
+                                                            <Run Text="{Binding WordCountText, Mode=OneWay}" />
+                                                            <Run Text="  •  " />
+                                                            <Run Text="{Binding DurationFormatted, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+
+                                                    <!-- Hover-style actions (always visible in this layout) -->
+                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+                                                        <Button Style="{StaticResource Style.TitlebarIconButton}" Click="CopyTranscriptBtn_Click" Tag="{Binding FinalText}" ToolTip="Play">
+                                                            <TextBlock Text="▶" FontSize="11" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource Style.TitlebarIconButton}" Click="CopyTranscriptBtn_Click" Tag="{Binding FinalText}" ToolTip="Copy">
+                                                            <TextBlock Text="⧉" FontSize="12" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource Style.TitlebarIconButton}" Click="CopyTranscriptBtn_Click" Tag="{Binding FinalText}" ToolTip="Flag">
+                                                            <TextBlock Text="⚑" FontSize="12" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource Style.TitlebarIconButton}" ToolTip="More">
+                                                            <TextBlock Text="⋯" FontSize="14" />
+                                                        </Button>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- Empty state, shown when no dictations exist yet -->
+                                <StackPanel x:Name="HistoryEmptyState" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,40,0,40" Visibility="Collapsed">
+                                    <TextBlock Text="🎙" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,12" />
+                                    <TextBlock Text="No dictations yet" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Press Ctrl + Win, or hit Quick Dictation above,&#x0a;and your first transcript will appear here." FontSize="12" Foreground="{StaticResource Brush.Light.TextDim}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,6,0,0" LineHeight="18" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- VIEW: History (full-page variant) — keeps HistoryViewPanel container for code-behind hooks -->
+                    <Grid x:Name="HistoryView" Margin="36,28,36,28" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                            <TextBlock Text="History" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                            <TextBlock Text="All past dictations, ordered by most recent." Margin="0,6,0,0" FontSize="13" Foreground="{StaticResource Brush.Light.TextDim}" />
+                        </StackPanel>
+                        <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="14" Padding="0">
+                            <Grid x:Name="HistoryViewPanel">
+                                <!-- Re-uses HistoryListBox + HistorySearchBox from the Home view -->
+                                <ListBox x:Name="HistoryListBoxFull" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionMode="Single" VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="16,12" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="0,0,0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="80" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding TimeFormatted}" FontFamily="Consolas, monospace" FontSize="12" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextDim}" VerticalAlignment="Top" />
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <Border Background="#FEF3C7" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" Margin="0,0,0,6"
+                                                                Visibility="{Binding HasCorrections, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                            <TextBlock FontSize="10" FontWeight="Bold" Foreground="#92400E">
+                                                                <Run Text="⚡ CORRECTION APPLIED: " />
+                                                                <Run Text="{Binding CorrectionsSummary, Mode=OneWay}" />
+                                                            </TextBlock>
+                                                        </Border>
+                                                        <TextBlock Text="{Binding FinalText}" FontSize="14" Foreground="{StaticResource Brush.Light.Text}" TextWrapping="Wrap" LineHeight="20" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="2" Style="{StaticResource Style.Button.Ghost}" Click="CopyTranscriptBtn_Click" Tag="{Binding FinalText}">
+                                                        <TextBlock Text="📋 COPY" FontSize="10" FontWeight="Bold" />
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- VIEW: Transforms (Dictionary panel) -->
+                    <Grid x:Name="DictionaryView" Margin="36,28,36,28" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                            <TextBlock Text="Transforms" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                            <TextBlock Text="Correction pairs and keywords that bias the recognizer." Margin="0,6,0,0" FontSize="13" Foreground="{StaticResource Brush.Light.TextDim}" />
+                        </StackPanel>
+                        <Grid Grid.Row="1" x:Name="DictionaryViewPanel">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="40" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="6" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="6" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Background="{StaticResource Brush.Slate.100}" CornerRadius="8" Padding="10,0" VerticalAlignment="Center" Height="32">
+                                    <Grid>
+                                        <TextBlock x:Name="DictSearchPlaceholder" Text="🔍  Search dictionary words or replacement rules..." FontSize="12" Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                        <TextBox x:Name="DictSearchBox" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brush.Light.Text}" FontSize="12" VerticalAlignment="Center" TextChanged="DictSearchBox_TextChanged" />
+                                    </Grid>
+                                </Border>
+                                <Button Grid.Column="1" x:Name="AddDictionaryBtn" Style="{StaticResource Style.Button.Primary}" Click="AddDictionaryBtn_Click" Padding="12,6">
+                                    <TextBlock Text="+ ADD ENTRY" FontSize="11" FontWeight="Bold" />
+                                </Button>
+                                <Button Grid.Column="3" x:Name="OpenDictFileBtn" Style="{StaticResource Style.Button.Ghost}" Click="OpenDictFileBtn_Click" Padding="10,6" ToolTip="Open dictionary.json file in editor">
+                                    <TextBlock Text="JSON FILE" FontSize="10" FontWeight="Bold" />
+                                </Button>
+                                <!-- (TabHistoryBtn / TabDictionaryBtn live in the Home view for the legacy hooks) -->
+                            </Grid>
+                            <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="14">
+                                <ListBox x:Name="DictionaryListBox" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="14,10" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="0,0,0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <Border Background="{StaticResource Brush.Indigo.50}" CornerRadius="4" Padding="6,2" Margin="0,0,8,0">
+                                                                <TextBlock Text="{Binding DisplayType}" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Indigo.700}" />
+                                                            </Border>
+                                                            <Border Background="#DCFCE7" CornerRadius="4" Padding="6,2"
+                                                                    Visibility="{Binding MatchGluedWords, Converter={StaticResource BoolToVis}}">
+                                                                <TextBlock Text="GLUED WORDS SUPPORT" FontSize="9" FontWeight="Bold" Foreground="#166534" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding DisplayRule}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Button Style="{StaticResource Style.Button.Ghost}" Padding="10,4" Margin="0,0,6,0" Click="EditDictEntryBtn_Click" Tag="{Binding Id}">
+                                                            <TextBlock Text="EDIT" FontSize="10" FontWeight="Bold" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource Style.Button.Ghost}" Padding="10,4" Click="DeleteDictEntryBtn_Click" Tag="{Binding Id}">
+                                                            <TextBlock Text="DELETE" FontSize="10" FontWeight="Bold" Foreground="#DC2626" />
+                                                        </Button>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
+                    <!-- VIEW: Styles (placeholder) -->
+                    <Grid x:Name="StylesView" Margin="36,28,36,28" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Writing Styles" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                            <TextBlock Text="Tune how Echo formats its output." Margin="0,6,0,18" FontSize="13" Foreground="{StaticResource Brush.Light.TextDim}" />
+                            <Border Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="14" Padding="24">
+                                <StackPanel>
+                                    <TextBlock Text="Coming soon" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" />
+                                    <TextBlock Text="Style presets (formal, casual, code-aware) will live here." Margin="0,8,0,0" Foreground="{StaticResource Brush.Light.TextDim}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- VIEW: Dictation (large quick-dictate + history shortcuts) -->
+                    <Grid x:Name="DictationView" Margin="36,28,36,28" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Dictation" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                            <TextBlock Text="Hold the hotkey or press Quick Dictation to start." Margin="0,6,0,18" FontSize="13" Foreground="{StaticResource Brush.Light.TextDim}" />
+                            <Border Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="16" Padding="40">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock x:Name="VuMeter" Text="🎙" FontSize="64" HorizontalAlignment="Center" />
+                                    <TextBlock x:Name="DictationViewState" Text="Idle — ready when you are" Margin="0,16,0,0" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" HorizontalAlignment="Center" />
+                                    <Button Style="{StaticResource Style.Button.Primary}" Margin="0,18,0,0" Padding="22,10" Click="QuickDictationBtn_Click">
+                                        <TextBlock Text="Start Quick Dictation" />
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </ScrollViewer>
+
+            <!-- ─── RIGHT RAIL ──────────────────────────────────────── -->
+            <Border Grid.Column="2" Background="White" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,18,16,18">
+
+                        <!-- Stats -->
+                        <Border Style="{StaticResource Style.Card}" Padding="14">
                             <StackPanel>
-                                <TextBlock Text="PUSH-TO-TALK SHORTCUT" FontSize="8.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" />
-                                <TextBlock Text="Hold RIGHT CTRL in any app" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Brush.Text.SilkscreenBright}" Margin="0,2,0,0" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="36" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="32" Height="32" CornerRadius="10" Background="{StaticResource Brush.Indigo.50}" HorizontalAlignment="Left">
+                                        <TextBlock Text="🔊" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                        <TextBlock x:Name="TotalWordsValue" Text="0" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                                        <TextBlock Text="Total words" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextDim}" />
+                                    </StackPanel>
+                                </Grid>
+                                <Separator Background="{StaticResource Brush.Light.BorderSoft}" Margin="0,6,0,6" />
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="36" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="32" Height="32" CornerRadius="10" Background="{StaticResource Brush.Indigo.50}" HorizontalAlignment="Left">
+                                        <TextBlock Text="⚡" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                        <TextBlock x:Name="AvgWpmValue" Text="0" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                                        <TextBlock Text="Avg WPM" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextDim}" />
+                                    </StackPanel>
+                                </Grid>
+                                <Separator Background="{StaticResource Brush.Light.BorderSoft}" Margin="0,6,0,6" />
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="36" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="32" Height="32" CornerRadius="10" Background="{StaticResource Brush.Indigo.50}" HorizontalAlignment="Left">
+                                        <TextBlock Text="🛡" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                        <TextBlock x:Name="DayStreakValue" Text="0" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" />
+                                        <TextBlock Text="Day streak" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextDim}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Voice Profile -->
+                        <Border Style="{StaticResource Style.Card}" Padding="14" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Your Voice Profile" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" />
+                                <TextBlock Text="Discover how you use your voice." Margin="0,4,0,10" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextDim}" />
+                                <Grid Height="6" Background="{StaticResource Brush.Slate.100}">
+                                    <Rectangle x:Name="VoiceProfileProgress" Fill="{StaticResource Brush.Indigo.500}" Width="0" Height="6" HorizontalAlignment="Left" />
+                                </Grid>
+                                <Grid Margin="0,6,0,0">
+                                    <TextBlock Text=" " FontSize="10" Foreground="Transparent" />
+                                    <TextBlock x:Name="VoiceProfileUnlocksText" Text="Unlocks in 1,800 words" FontSize="11" Foreground="{StaticResource Brush.Light.TextDim}" HorizontalAlignment="Right" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Daily Goal with circular progress ring -->
+                        <Border Style="{StaticResource Style.Card}" Padding="14" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Daily Goal" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" />
+                                <TextBlock x:Name="DailyGoalEncouragement" Text="Keep it up! You're on a roll." Margin="0,4,0,10" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextDim}" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Ring: outer track + inner arc, sized 88x88, 6px stroke -->
+                                    <Grid Grid.Column="0" Width="88" Height="88">
+                                        <Ellipse Width="88" Height="88" Stroke="{StaticResource Brush.Indigo.50}" StrokeThickness="6" />
+                                        <Ellipse x:Name="DailyGoalRing" Width="88" Height="88" Stroke="{StaticResource Brush.Indigo.500}" StrokeThickness="6" StrokeDashArray="176 376" StrokeStartLineCap="Round" RenderTransformOrigin="0.5,0.5">
+                                            <Ellipse.RenderTransform>
+                                                <RotateTransform Angle="-90" />
+                                            </Ellipse.RenderTransform>
+                                        </Ellipse>
+                                        <TextBlock x:Name="DailyGoalPercent" Text="0%" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock FontSize="13" Foreground="{StaticResource Brush.Light.Text}">
+                                            <Run x:Name="DailyGoalCurrentRun" Text="0" Foreground="{StaticResource Brush.Indigo.500}" FontWeight="Bold" />
+                                            <Run x:Name="DailyGoalTargetRun" Text=" / 1,600 words" />
+                                        </TextBlock>
+                                        <TextBlock x:Name="DailyGoalResetsIn" Text="Resets in —" Margin="0,4,0,0" FontSize="11.5" Foreground="{StaticResource Brush.Light.TextDim}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tips & Shortcuts -->
+                        <Border Style="{StaticResource Style.Card}" Padding="14" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Tips &amp; Shortcuts" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Brush.Light.Text}" />
+                                <Grid Margin="0,10,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <Border Style="{StaticResource KbdPill}"><TextBlock Text="Ctrl" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="Win" /></Border>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="Start / Stop dictation" FontSize="12" Foreground="{StaticResource Brush.Light.TextDim}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid Margin="0,6,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <Border Style="{StaticResource KbdPill}"><TextBlock Text="Ctrl" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="Win" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="E" /></Border>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="Edit last text" FontSize="12" Foreground="{StaticResource Brush.Light.TextDim}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid Margin="0,6,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <Border Style="{StaticResource KbdPill}"><TextBlock Text="Ctrl" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="Win" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="Space" /></Border>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="Toggle mode" FontSize="12" Foreground="{StaticResource Brush.Light.TextDim}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid Margin="0,6,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <Border Style="{StaticResource KbdPill}"><TextBlock Text="Ctrl" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="Win" /></Border>
+                                        <TextBlock Text=" + " Foreground="{StaticResource Brush.Light.TextFaint}" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource KbdPill}" Margin="2,0,0,0"><TextBlock Text="H" /></Border>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="Show / Hide Echo" FontSize="12" Foreground="{StaticResource Brush.Light.TextDim}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="View all shortcuts →" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Brush.Indigo.500}" HorizontalAlignment="Right" Cursor="Hand" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
-
-                    <!-- Deck Status Legend -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal">
-                        <Ellipse x:Name="PowerLed" Width="7" Height="7" Fill="{StaticResource Brush.Indicator.Power}" Margin="0,0,6,0" VerticalAlignment="Center" />
-                        <TextBlock x:Name="DeckStatusLabel"
-                                   Text="STANDBY / READY"
-                                   FontSize="11"
-                                   FontWeight="Bold"
-                                   Foreground="{StaticResource Brush.Text.SilkscreenBright}"
-                                   FontFamily="Consolas, monospace"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Text=" | MODEL: " FontSize="10" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="8,0,0,0" VerticalAlignment="Center" />
-                        <TextBlock x:Name="ActiveModelLabel" Text="—" FontSize="10" FontWeight="Bold" Foreground="#E09F3E" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Grid>
-            </Grid>
-        </Border>
-
-        <!-- Seam 2 -->
-        <Border Grid.Row="3" Style="{StaticResource Style.Panel.Seam}" />
-
-        <!-- ������������������������������������������������������������������ -->
-        <!-- ROW 4: MAIN CONTENT BAY (HISTORY LOG & DICTIONARY DECK)            -->
-        <!-- ������������������������������������������������������������������ -->
-        <Grid Grid.Row="4" Background="{StaticResource Brush.Chassis.BodyDark}" Margin="16,12">
-            <Grid.RowDefinitions>
-                <!-- Bay Tab Selector -->
-                <RowDefinition Height="34" />
-                <RowDefinition Height="8" />
-                <!-- Tab Content Area -->
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <!-- Tab Buttons -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal">
-                <Button x:Name="TabHistoryBtn"
-                        Style="{StaticResource Style.Button.Transport}"
-                        Padding="18,6"
-                        Margin="0,0,4,0"
-                        Click="TabHistoryBtn_Click">
-                    <Grid>
-                        <TextBlock Text="📼 TAPE HISTORY" FontSize="10" FontWeight="Bold" />
-                        <Border x:Name="TabHistoryIndicator"
-                                Height="2"
-                                VerticalAlignment="Bottom"
-                                Margin="0,0,0,-8"
-                                Background="#52B788"
-                                Visibility="Collapsed" />
-                    </Grid>
-                </Button>
-
-                <Button x:Name="TabDictionaryBtn"
-                        Style="{StaticResource Style.Button.Transport}"
-                        Padding="18,6"
-                        Margin="0,0,4,0"
-                        Click="TabDictionaryBtn_Click">
-                    <Grid>
-                        <TextBlock Text="📖 DICTIONARY &amp; RULES" FontSize="10" FontWeight="Bold" />
-                        <Border x:Name="TabDictionaryIndicator"
-                                Height="2"
-                                VerticalAlignment="Bottom"
-                                Margin="0,0,0,-8"
-                                Background="#52B788"
-                                Visibility="Collapsed" />
-                    </Grid>
-                </Button>
-            </StackPanel>
-
-            <!-- ─── TAB 1: HISTORY VIEW ──────────────────────────────────── -->
-            <Grid x:Name="HistoryViewPanel" Grid.Row="2" Visibility="Visible">
-                <Grid.RowDefinitions>
-                    <!-- Search & Filter Bar -->
-                    <RowDefinition Height="36" />
-                    <RowDefinition Height="8" />
-                    <!-- History List Container -->
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <!-- Search & Actions Bar -->
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="10" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Search Input -->
-                    <Border Grid.Column="0" Background="{StaticResource Brush.Chassis.Inset}" BorderBrush="#2C2E35" BorderThickness="1" CornerRadius="2">
-                        <Grid Margin="10,0">
-                            <TextBlock x:Name="HistorySearchPlaceholder"
-                                       Text="� Search past transcriptions &amp; corrections..."
-                                       FontSize="11"
-                                       Foreground="{StaticResource Brush.Text.ReadoutDim}"
-                                       VerticalAlignment="Center"
-                                       IsHitTestVisible="False" />
-                            <TextBox x:Name="HistorySearchBox"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     Foreground="{StaticResource Brush.Text.Readout}"
-                                     FontSize="12"
-                                     VerticalAlignment="Center"
-                                     TextChanged="HistorySearchBox_TextChanged" />
-                        </Grid>
-                    </Border>
-
-                    <!-- Clear History Button -->
-                    <Button Grid.Column="2"
-                            Style="{StaticResource Style.Button.Transport}"
-                            Padding="12,6"
-                            Click="ClearHistoryBtn_Click">
-                        <TextBlock Text="CLEAR LOG" FontSize="9.5" FontWeight="Bold" />
-                    </Button>
-                </Grid>
-
-                <!-- History Items List -->
-                <Border Grid.Row="2" Background="{StaticResource Brush.Chassis.Inset}" BorderBrush="#2A2C34" BorderThickness="1" CornerRadius="2">
-                    <ListBox x:Name="HistoryListBox"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             SelectionMode="Single">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#1C1E23" BorderBrush="#2A2C34" BorderThickness="1" CornerRadius="2" Margin="8,4" Padding="14,10">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-
-                                        <!-- Header Row: Timestamp, Duration, Copy Button -->
-                                        <Grid Grid.Row="0" Margin="0,0,0,6">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding TimeFormatted}" FontSize="11" FontWeight="Bold" FontFamily="Consolas" Foreground="#9E9EA6" Margin="0,0,10,0" />
-                                                <TextBlock Text="{Binding DurationFormatted}" FontSize="10" FontFamily="Consolas" Foreground="#666872" Margin="0,0,10,0" />
-                                            </StackPanel>
-
-                                            <!-- Copy Button -->
-                                            <Button HorizontalAlignment="Right"
-                                                    Style="{StaticResource Style.Button.Transport}"
-                                                    Padding="10,4"
-                                                    Click="CopyTranscriptBtn_Click"
-                                                    Tag="{Binding FinalText}">
-                                                <TextBlock Text="📋 COPY" FontSize="9" FontWeight="Bold" />
-                                            </Button>
-                                        </Grid>
-
-                                        <!-- Correction Audit Badge (Visible only if correction applied) -->
-                                        <Border Grid.Row="1"
-                                                Background="#2E2008"
-                                                BorderBrush="#8A5A14"
-                                                BorderThickness="1"
-                                                CornerRadius="2"
-                                                Padding="8,3"
-                                                Margin="0,0,0,8"
-                                                HorizontalAlignment="Left"
-                                                Visibility="{Binding HasCorrections, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="⚡ CORRECTION APPLIED: " FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Correction.Badge}" />
-                                                <TextBlock Text="{Binding CorrectionsSummary}" FontSize="9.5" FontWeight="SemiBold" Foreground="#F0C068" />
-                                            </StackPanel>
-                                        </Border>
-
-                                        <!-- Final Transcribed Text -->
-                                        <TextBlock Grid.Row="2"
-                                                   Text="{Binding FinalText}"
-                                                   FontSize="13"
-                                                   Foreground="{StaticResource Brush.Text.Readout}"
-                                                   TextWrapping="Wrap"
-                                                   LineHeight="20" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Border>
-            </Grid>
-
-            <!-- ─── TAB 2: DICTIONARY VIEW ───────────────────────────────── -->
-            <Grid x:Name="DictionaryViewPanel" Grid.Row="2" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <!-- Controls Bar -->
-                    <RowDefinition Height="36" />
-                    <RowDefinition Height="8" />
-                    <!-- Dictionary List Container -->
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <!-- Actions Bar -->
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="10" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="6" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Search / Filter -->
-                    <Border Grid.Column="0" Background="{StaticResource Brush.Chassis.Inset}" BorderBrush="#2C2E35" BorderThickness="1" CornerRadius="2">
-                        <Grid Margin="10,0">
-                            <TextBlock x:Name="DictSearchPlaceholder"
-                                       Text="� Search dictionary words or replacement rules..."
-                                       FontSize="11"
-                                       Foreground="{StaticResource Brush.Text.ReadoutDim}"
-                                       VerticalAlignment="Center"
-                                       IsHitTestVisible="False" />
-                            <TextBox x:Name="DictSearchBox"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     Foreground="{StaticResource Brush.Text.Readout}"
-                                     FontSize="12"
-                                     VerticalAlignment="Center"
-                                     TextChanged="DictSearchBox_TextChanged" />
-                        </Grid>
-                    </Border>
-
-                    <!-- Add Entry Button -->
-                    <Button Grid.Column="2"
-                            Style="{StaticResource Style.Button.Transport}"
-                            Padding="14,6"
-                            Click="AddDictionaryBtn_Click">
-                        <TextBlock Text="+ ADD ENTRY" FontSize="10" FontWeight="Bold" Foreground="#66D18E" />
-                    </Button>
-
-                    <!-- Open JSON file button -->
-                    <Button Grid.Column="4"
-                            Style="{StaticResource Style.Button.Transport}"
-                            Padding="10,6"
-                            Click="OpenDictFileBtn_Click"
-                            ToolTip="Open dictionary.json file in editor">
-                        <TextBlock Text="� JSON FILE" FontSize="9.5" FontWeight="Bold" />
-                    </Button>
-                </Grid>
-
-                <!-- Dictionary Entries List -->
-                <Border Grid.Row="2" Background="{StaticResource Brush.Chassis.Inset}" BorderBrush="#2A2C34" BorderThickness="1" CornerRadius="2">
-                    <ListBox x:Name="DictionaryListBox"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#1C1E23" BorderBrush="#2A2C34" BorderThickness="1" CornerRadius="2" Margin="8,4" Padding="14,10">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Entry Details -->
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                <Border Background="#121316" BorderBrush="#3A3C44" BorderThickness="1" CornerRadius="2" Padding="6,2" Margin="0,0,8,0">
-                                                    <TextBlock Text="{Binding DisplayType}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" />
-                                                </Border>
-                                                <Border Background="#102518" BorderBrush="#286038" BorderThickness="1" CornerRadius="2" Padding="6,2"
-                                                        Visibility="{Binding MatchGluedWords, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock Text="GLUED WORDS SUPPORT" FontSize="8.5" FontWeight="Bold" Foreground="#52B788" />
-                                                </Border>
-                                            </StackPanel>
-
-                                            <!-- The Rule / Keyword Text -->
-                                            <TextBlock Text="{Binding DisplayRule}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Readout}" />
-                                        </StackPanel>
-
-                                        <!-- Action Buttons: Edit, Delete -->
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Style="{StaticResource Style.Button.Transport}"
-                                                    Padding="10,4"
-                                                    Margin="0,0,6,0"
-                                                    Click="EditDictEntryBtn_Click"
-                                                    Tag="{Binding Id}">
-                                                <TextBlock Text="EDIT" FontSize="9" FontWeight="Bold" />
-                                            </Button>
-                                            <Button Style="{StaticResource Style.Button.Transport}"
-                                                    Padding="10,4"
-                                                    Click="DeleteDictEntryBtn_Click"
-                                                    Tag="{Binding Id}">
-                                                <TextBlock Text="DEL" FontSize="9" FontWeight="Bold" Foreground="#E63946" />
-                                            </Button>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Border>
-            </Grid>
+                </ScrollViewer>
+            </Border>
         </Grid>
 
-        <!-- ������������������������������������������������������������������ -->
-        <!-- ROW 5: BOTTOM STATUS BAR STRIP                                     -->
-        <!-- ������������������������������������������������������������������ -->
-        <Border Grid.Row="5" Background="#121316" BorderBrush="#2A2C34" BorderThickness="0,1,0,0" Padding="16,0">
-            <Grid VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="StatusBarText" Text="ECHO AUDIO CORP. • ALL SPEECH PROCESSED FULLY ON-DEVICE • NO CLOUD TELEMETRY"
-                           FontSize="9" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" />
-                <TextBlock Grid.Column="1" Text="STEREO HI-FI 16-BIT / 16000Hz"
-                           FontSize="9" FontWeight="Bold" FontFamily="Consolas" Foreground="#555866" />
-            </Grid>
-        </Border>
-
-        <!-- ������������������������������������������������������������������ -->
-        <!-- MODAL OVERLAY: ADD / EDIT DICTIONARY ENTRY DIALOG                  -->
-        <!-- ������������������������������������������������������������������ -->
-        <Grid x:Name="DictModalOverlay" Grid.RowSpan="6" Background="#B0000000" Visibility="Collapsed">
-            <Border Width="500" Background="{StaticResource Brush.Chassis.Panel}" BorderBrush="#3A3C44" BorderThickness="2" CornerRadius="4" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <!-- ============================================================ -->
+        <!-- MODAL OVERLAY: ADD / EDIT DICTIONARY ENTRY DIALOG              -->
+        <!-- (preserved from the original UI)                               -->
+        <!-- ============================================================ -->
+        <Grid x:Name="DictModalOverlay" Grid.RowSpan="2" Background="#B0000000" Visibility="Collapsed">
+            <Border Width="500" Background="White" BorderBrush="{StaticResource Brush.Light.Border}" BorderThickness="1" CornerRadius="16" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock x:Name="ModalTitleText" Text="ADD DICTIONARY ENTRY" FontSize="14" FontWeight="Bold" Foreground="{StaticResource Brush.Text.SilkscreenBright}" Margin="0,0,0,16" />
+                    <TextBlock x:Name="ModalTitleText" Text="ADD DICTIONARY ENTRY" FontSize="14" FontWeight="Bold" Foreground="{StaticResource Brush.Light.Text}" Margin="0,0,0,16" />
 
-                    <!-- Entry Type Selector -->
-                    <TextBlock Text="ENTRY TYPE" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,0,0,6" />
+                    <TextBlock Text="ENTRY TYPE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextDim}" Margin="0,0,0,6" />
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                        <RadioButton x:Name="RadioCorrection" Content="Correction Pair (When you hear X → write Y)" IsChecked="True" Foreground="{StaticResource Brush.Text.Readout}" Margin="0,0,16,0" Checked="RadioType_Checked" />
-                        <RadioButton x:Name="RadioKeyword" Content="Vocabulary Keyword" Foreground="{StaticResource Brush.Text.Readout}" Checked="RadioType_Checked" />
+                        <RadioButton x:Name="RadioCorrection" Content="Correction Pair (When you hear X → write Y)" IsChecked="True" Foreground="{StaticResource Brush.Light.Text}" Margin="0,0,16,0" Checked="RadioType_Checked" />
+                        <RadioButton x:Name="RadioKeyword" Content="Transform Keyword (bias the recognizer)" Foreground="{StaticResource Brush.Light.Text}" Checked="RadioType_Checked" />
                     </StackPanel>
 
-                    <!-- From Input -->
-                    <TextBlock x:Name="LabelFromText" Text="WHEN YOU HEAR (SPOKEN PHRASE):" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,0,0,6" />
-                    <Border Background="{StaticResource Brush.Chassis.Inset}" BorderBrush="#3A3C44" BorderThickness="1" CornerRadius="2" Padding="8,6" Margin="0,0,0,4">
-                        <TextBox x:Name="ModalFromBox" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brush.Text.Readout}" FontSize="13" TextChanged="ModalFromBox_TextChanged" />
+                    <TextBlock x:Name="LabelFromText" Text="WHEN YOU HEAR (SPOKEN PHRASE):" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextDim}" Margin="0,0,0,6" />
+                    <Border Background="{StaticResource Brush.Slate.100}" CornerRadius="8" Padding="10,6" Margin="0,0,0,4">
+                        <TextBox x:Name="ModalFromBox" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brush.Light.Text}" FontSize="13" TextChanged="ModalFromBox_TextChanged" />
                     </Border>
 
-                    <!-- Collision Warning Alert Box -->
-                    <Border x:Name="CollisionWarningBox" Background="#2E1C05" BorderBrush="#D48B1E" BorderThickness="1" CornerRadius="2" Padding="8,6" Margin="0,4,0,12" Visibility="Collapsed">
-                        <TextBlock x:Name="CollisionWarningText" Text="Warning: ..." FontSize="10.5" Foreground="#F0A83A" TextWrapping="Wrap" />
+                    <Border x:Name="CollisionWarningBox" Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,6,0,12" Visibility="Collapsed">
+                        <TextBlock x:Name="CollisionWarningText" Text="Warning: ..." FontSize="11" Foreground="#92400E" TextWrapping="Wrap" />
                     </Border>
 
-                    <!-- To Input (Correction only) -->
                     <StackPanel x:Name="ModalToSection" Margin="0,8,0,14">
-                        <TextBlock Text="REPLACE WITH (WRITTEN FORMAT):" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Text.Silkscreen}" Margin="0,0,0,6" />
-                        <Border Background="{StaticResource Brush.Chassis.Inset}" BorderBrush="#3A3C44" BorderThickness="1" CornerRadius="2" Padding="8,6">
-                            <TextBox x:Name="ModalToBox" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brush.Text.Readout}" FontSize="13" />
+                        <TextBlock Text="REPLACE WITH (WRITTEN FORMAT):" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextDim}" Margin="0,0,0,6" />
+                        <Border Background="{StaticResource Brush.Slate.100}" CornerRadius="8" Padding="10,6">
+                            <TextBox x:Name="ModalToBox" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brush.Light.Text}" FontSize="13" />
                         </Border>
                     </StackPanel>
 
-                    <!-- Glued words toggle -->
-                    <CheckBox x:Name="ModalGluedCheck" Content="Match glued words (e.g. 'CloudCode' &amp; 'Cloud-Code' → 'Claude Code')" IsChecked="True" Foreground="{StaticResource Brush.Text.Readout}" FontSize="11" Margin="0,0,0,20" />
+                    <CheckBox x:Name="ModalGluedCheck" Content="Match glued words (e.g. 'CloudCode' &amp; 'Cloud-Code' → 'Claude Code')" IsChecked="True" Foreground="{StaticResource Brush.Light.Text}" FontSize="11.5" Margin="0,0,0,20" />
 
-                    <!-- Dialog Actions -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Style="{StaticResource Style.Button.Transport}" Padding="16,8" Margin="0,0,10,0" Click="ModalCancelBtn_Click">
+                        <Button Style="{StaticResource Style.Button.Ghost}" Padding="14,8" Margin="0,0,8,0" Click="ModalCancelBtn_Click">
                             <TextBlock Text="CANCEL" FontSize="11" FontWeight="Bold" />
                         </Button>
-                        <Button Style="{StaticResource Style.Button.Transport}" Padding="20,8" Click="ModalSaveBtn_Click">
-                            <TextBlock Text="SAVE ENTRY" FontSize="11" FontWeight="Bold" Foreground="#52B788" />
+                        <Button Style="{StaticResource Style.Button.Primary}" Padding="18,8" Click="ModalSaveBtn_Click">
+                            <TextBlock Text="SAVE ENTRY" FontSize="11" FontWeight="Bold" />
                         </Button>
                     </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>
 
+        <!-- ============================================================ -->
+        <!-- STATUS FOOTER (bottom of body, full width)                     -->
+        <!-- ============================================================ -->
+        <Border Grid.Row="1" VerticalAlignment="Bottom" Background="White" BorderBrush="{StaticResource Brush.Light.BorderSoft}" BorderThickness="0,1,0,0" Padding="20,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusBarText" Text="Echo • All speech processed on-device • No cloud telemetry" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Brush.Light.TextFaint}" />
+                <TextBlock Grid.Column="1" Text="STEREO HI-FI 16-BIT / 16000Hz" FontSize="10" FontWeight="Bold" FontFamily="Consolas" Foreground="{StaticResource Brush.Light.TextFaint}" />
+            </Grid>
+        </Border>
     </Grid>
 </Window>

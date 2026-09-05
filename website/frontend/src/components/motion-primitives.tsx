@@ -61,12 +61,15 @@ export function WordsReveal({
   delay = 0,
   stagger = 0.09,
   once = true,
+  immediate = false,
 }: {
   text: string;
   className?: string;
   delay?: number;
   stagger?: number;
   once?: boolean;
+  /** Skip in-view trigger; animate on mount (for above-the-fold content). */
+  immediate?: boolean;
 }) {
   const reduce = useReducedMotion();
   const words = text.split(" ");
@@ -75,13 +78,20 @@ export function WordsReveal({
       {words.map((word, i) => (
         <span
           key={`${word}-${i}`}
-          style={{ display: "inline-block", overflow: "hidden", verticalAlign: "bottom" }}
+          style={{
+            display: "inline-block",
+            overflow: "hidden",
+            verticalAlign: "bottom",
+            paddingBottom: "0.18em",
+            marginBottom: "-0.18em",
+          }}
         >
           <motion.span
             style={{ display: "inline-block", willChange: "transform" }}
             initial={{ y: reduce ? 0 : "110%", opacity: 0 }}
-            whileInView={{ y: 0, opacity: 1 }}
-            viewport={{ once }}
+            animate={immediate ? { y: 0, opacity: 1 } : undefined}
+            whileInView={immediate ? undefined : { y: 0, opacity: 1 }}
+            viewport={immediate ? undefined : { once, margin: "0px 0px 200px 0px" }}
             transition={{
               duration: 0.7,
               delay: delay + i * stagger,

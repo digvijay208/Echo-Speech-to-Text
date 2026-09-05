@@ -32,6 +32,28 @@ public sealed class EchoSettings
     public bool VadEnabled { get; set; } = true;
     public string GroqApiKey { get; set; } = "";
 
+    /// <summary>
+    /// ISO-639-1 code of the language you dictate in ("hi", "mr", …).
+    /// Empty = auto-detect. Honored by multilingual engines (Whisper Base,
+    /// Groq); English-only engines (Small.en, Parakeet) always use "en".
+    /// </summary>
+    public string SpokenLanguage { get; set; } = "";
+
+    /// <summary>Target words per day, drives the Daily Goal ring on the home view.</summary>
+    public int DailyGoalWords { get; set; } = 1600;
+
+    /// <summary>How many words until the Voice Profile is "unlocked".</summary>
+    public int VoiceProfileTargetWords { get; set; } = 1800;
+
+    // Window placement (chromeless window has no OS-level memory of its
+    // own, so we persist the last size/position the user resized to and
+    // restore it on next launch. -1 means "no saved value yet".
+    public double WindowLeft { get; set; } = -1;
+    public double WindowTop { get; set; } = -1;
+    public double WindowWidth { get; set; } = -1;
+    public double WindowHeight { get; set; } = -1;
+    public bool WindowMaximized { get; set; } = false;
+
     public static EchoSettings Load()
     {
         try

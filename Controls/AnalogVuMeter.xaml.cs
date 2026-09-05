@@ -28,11 +28,11 @@ public partial class AnalogVuMeter : UserControl
     {
         InitializeComponent();
 
-        // 60fps needle ballistic animation timer. Started on demand only ? it used to run
-        // for the whole life of the process, burning CPU 60x/sec while sitting in the tray.
-        _physicsTimer = new DispatcherTimer(DispatcherPriority.Render)
+        // 30fps needle physics, on demand only. 60fps at Render priority kept
+        // the UI thread hot and starved input during every recording.
+        _physicsTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromMilliseconds(16)
+            Interval = TimeSpan.FromMilliseconds(33)
         };
         _physicsTimer.Tick += OnPhysicsTick;
     }

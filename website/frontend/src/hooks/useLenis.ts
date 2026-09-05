@@ -21,14 +21,16 @@ export function useLenis() {
     };
     rafId = requestAnimationFrame(raf);
 
-    // Keep in-page anchor navigation working through Lenis
+    // Keep in-page anchor navigation working through Lenis. Only handle
+    // pure fragment links (#foo), not route+hash links like "/#privacy" —
+    // those are owned by React Router.
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement;
       const anchor = target.closest<HTMLAnchorElement>('a[href^="#"]');
       if (!anchor) return;
-      const id = anchor.getAttribute("href");
-      if (!id || id === "#") return;
-      const el = document.querySelector(id);
+      const href = anchor.getAttribute("href");
+      if (!href || href === "#" || href.includes("/")) return;
+      const el = document.querySelector(href);
       if (!el) return;
       e.preventDefault();
       lenis.scrollTo(el as HTMLElement, { offset: -24 });

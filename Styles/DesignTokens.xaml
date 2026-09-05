@@ -189,4 +189,232 @@
     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#1F3849" />
     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#52B788" />
 
+    <!-- ============================================================ -->
+    <!-- LIGHT SAAS THEME — new home shell (sidebar + main + rail)    -->
+    <!-- Off-white ground, single indigo accent, slate text. Kept in   -->
+    <!-- the same file so SettingsWindow + HudOverlay can still       -->
+    <!-- reference the dark tokens above unchanged.                   -->
+    <!-- ============================================================ -->
+
+    <!-- ─── Light Surfaces ──────────────────────────────────────────── -->
+    <Color x:Key="Color.Light.Page">#F8F7F4</Color>
+    <Color x:Key="Color.Light.Card">#FFFFFF</Color>
+    <Color x:Key="Color.Light.Sidebar">#FFFFFF</Color>
+    <Color x:Key="Color.Light.Border">#E7E5E0</Color>
+    <Color x:Key="Color.Light.BorderSoft">#EFEDE8</Color>
+
+    <!-- ─── Slate Text ─────────────────────────────────────────────── -->
+    <Color x:Key="Color.Light.Text">#0F172A</Color>
+    <Color x:Key="Color.Light.TextMuted">#475569</Color>
+    <Color x:Key="Color.Light.TextDim">#64748B</Color>
+    <Color x:Key="Color.Light.TextFaint">#94A3B8</Color>
+
+    <!-- ─── Indigo Accent (#6366f1 family) ─────────────────────────── -->
+    <Color x:Key="Color.Indigo.50">#EEF2FF</Color>
+    <Color x:Key="Color.Indigo.100">#E0E7FF</Color>
+    <Color x:Key="Color.Indigo.200">#C7D2FE</Color>
+    <Color x:Key="Color.Indigo.500">#6366F1</Color>
+    <Color x:Key="Color.Indigo.600">#4F46E5</Color>
+    <Color x:Key="Color.Indigo.700">#4338CA</Color>
+
+    <Color x:Key="Color.Rose.500">#F43F5E</Color>
+    <Color x:Key="Color.Slate.100">#F1F5F9</Color>
+    <Color x:Key="Color.Slate.200">#E2E8F0</Color>
+
+    <!-- ─── Light Brushes ──────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="Brush.Light.Page"     Color="{StaticResource Color.Light.Page}" />
+    <SolidColorBrush x:Key="Brush.Light.Card"     Color="{StaticResource Color.Light.Card}" />
+    <SolidColorBrush x:Key="Brush.Light.Sidebar"  Color="{StaticResource Color.Light.Sidebar}" />
+    <SolidColorBrush x:Key="Brush.Light.Border"   Color="{StaticResource Color.Light.Border}" />
+    <SolidColorBrush x:Key="Brush.Light.BorderSoft" Color="{StaticResource Color.Light.BorderSoft}" />
+
+    <SolidColorBrush x:Key="Brush.Light.Text"      Color="{StaticResource Color.Light.Text}" />
+    <SolidColorBrush x:Key="Brush.Light.TextMuted" Color="{StaticResource Color.Light.TextMuted}" />
+    <SolidColorBrush x:Key="Brush.Light.TextDim"   Color="{StaticResource Color.Light.TextDim}" />
+    <SolidColorBrush x:Key="Brush.Light.TextFaint" Color="{StaticResource Color.Light.TextFaint}" />
+
+    <SolidColorBrush x:Key="Brush.Indigo.50"  Color="{StaticResource Color.Indigo.50}" />
+    <SolidColorBrush x:Key="Brush.Indigo.100" Color="{StaticResource Color.Indigo.100}" />
+    <SolidColorBrush x:Key="Brush.Indigo.200" Color="{StaticResource Color.Indigo.200}" />
+    <SolidColorBrush x:Key="Brush.Indigo.500" Color="{StaticResource Color.Indigo.500}" />
+    <SolidColorBrush x:Key="Brush.Indigo.600" Color="{StaticResource Color.Indigo.600}" />
+    <SolidColorBrush x:Key="Brush.Indigo.700" Color="{StaticResource Color.Indigo.700}" />
+
+    <SolidColorBrush x:Key="Brush.Rose.500"   Color="{StaticResource Color.Rose.500}" />
+    <SolidColorBrush x:Key="Brush.Slate.100"  Color="{StaticResource Color.Slate.100}" />
+    <SolidColorBrush x:Key="Brush.Slate.200"  Color="{StaticResource Color.Slate.200}" />
+
+    <!-- ─── Hero gradient (navy → purple → orange, image #3) ────────── -->
+    <LinearGradientBrush x:Key="Brush.Hero.Gradient" StartPoint="0,0" EndPoint="1,0.6">
+        <GradientStop Color="#1B1B3A" Offset="0.0" />
+        <GradientStop Color="#2B2150" Offset="0.35" />
+        <GradientStop Color="#5A3A8A" Offset="0.70" />
+        <GradientStop Color="#C0744B" Offset="1.0" />
+    </LinearGradientBrush>
+
+    <!-- ─── Indigo CTA button (light) ──────────────────────────────── -->
+    <Style x:Key="Style.Button.Primary" TargetType="Button">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontFamily" Value="Segoe UI, Inter, Arial" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="Background" Value="{StaticResource Brush.Indigo.500}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="8"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Brush.Indigo.600}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Brush.Indigo.700}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ─── Subtle light card ──────────────────────────────────────── -->
+    <Style x:Key="Style.Card" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Brush.Light.Card}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Brush.Light.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
+    <!-- ─── Ghost (light) button ───────────────────────────────────── -->
+    <Style x:Key="Style.Button.Ghost" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource Brush.Light.TextMuted}" />
+        <Setter Property="FontFamily" Value="Segoe UI, Inter, Arial" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource Brush.Light.Border}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Brush.Slate.100}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ─── Sidebar nav item (light) — ToggleButton so IsChecked works -->
+    <Style x:Key="Style.SidebarNavItem" TargetType="ToggleButton">
+        <Setter Property="Foreground" Value="{StaticResource Brush.Light.TextMuted}" />
+        <Setter Property="FontFamily" Value="Segoe UI, Inter, Arial" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <!-- Left accent bar (shown only when IsChecked) -->
+                        <Border x:Name="AccentBar"
+                                Width="3"
+                                HorizontalAlignment="Left"
+                                CornerRadius="0,2,2,0"
+                                Background="{StaticResource Brush.Indigo.500}"
+                                Visibility="Collapsed" />
+                        <Border x:Name="bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="10"
+                                Margin="6,2,6,2"
+                                Padding="{TemplateBinding Padding}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="icon" Text="{TemplateBinding Tag}"
+                                           FontFamily="Segoe MDL2 Assets, Segoe Fluent Icons, Segoe UI Symbol"
+                                           FontSize="15"
+                                           VerticalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}" />
+                                <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bg" Property="Background" Value="{StaticResource Brush.Slate.100}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="bg" Property="Background" Value="{StaticResource Brush.Indigo.50}" />
+                            <Setter Property="Foreground" Value="{StaticResource Brush.Indigo.600}" />
+                            <Setter TargetName="icon" Property="Foreground" Value="{StaticResource Brush.Indigo.600}" />
+                            <Setter TargetName="AccentBar" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ─── Keyboard pill (Ctrl / Win / E / etc.) ───────────────────── -->
+    <Style x:Key="KbdPill" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Brush.Indigo.50}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Brush.Indigo.200}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ─── Titlebar icon button (light) ───────────────────────────── -->
+    <Style x:Key="Style.TitlebarIconButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource Brush.Light.TextMuted}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="8">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Brush.Slate.100}" />
+                            <Setter Property="Foreground" Value="{StaticResource Brush.Light.Text}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

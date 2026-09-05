@@ -58,6 +58,20 @@ public sealed class DictationService : INotifyPropertyChanged, IDisposable
     /// </summary>
     public event Action<string>? HudError;
 
+    /// <summary>
+    /// Raised when a transient status change should be surfaced to the user
+    /// without leaving the idle pill (e.g. "no model" or "mic error"). The
+    /// HUD flips back to its idle state on a short timer. The first arg is
+    /// the headline, the optional second is a one-line subhead.
+    /// </summary>
+    public event Action<string, string?>? HudStatusFlash;
+
+    /// <summary>
+    /// Raised after a successful dictation (text injected, card shown long
+    /// enough to read). The HUD should collapse to its mini pill.
+    /// </summary>
+    public event Action? HudShouldMinimize;
+
     /// <summary>Character count of the most recent injected text (for HUD Undo).</summary>
     public int LastInjectedChars { get; private set; }
 
@@ -160,10 +174,18 @@ public sealed class DictationService : INotifyPropertyChanged, IDisposable
 
     private static Dispatcher? UiDispatcher => System.Windows.Application.Current?.Dispatcher;
 
+    private long _lastLevelTicks;
+
     private void OnAudioLevelChanged(float level)
     {
         // Fired on the audio capture thread ~20x/sec. Must be a POST, not a blocking Invoke:
         // the capture thread cannot afford to wait on the UI thread.
+        // Throttled to ~15 fps: each hop raises PropertyChanged to two more
+        // handlers, so unthrottled levels cost ~60 dispatcher ops/sec.
+        long now = DateTime.UtcNow.Ticks;
+        if (now - _lastLevelTicks < TimeSpan.TicksPerMillisecond * 66)
+            return;
+        _lastLevelTicks = now;
         UiDispatcher?.BeginInvoke(new Action(() => AudioLevel = level), DispatcherPriority.Background);
     }
 
@@ -291,6 +313,7 @@ public sealed class DictationService : INotifyPropertyChanged, IDisposable
         {
             Logger.Warn("Push-to-talk ignored because Model is not ready. Open Settings to download.");
             StatusText = "NO MODEL ? OPEN SETTINGS";
+            HudStatusFlash?.Invoke("No model loaded", "Open Settings to download");
             return;
         }
 
@@ -310,6 +333,7 @@ public sealed class DictationService : INotifyPropertyChanged, IDisposable
             Logger.Error("Failed to start audio capture", ex);
             State = DictationState.Idle;
             StatusText = "MIC ERROR ? CHECK INPUT DEVICE";
+            HudStatusFlash?.Invoke("Microphone error", "Check your input device in Settings");
             return;
         }
 
@@ -494,11 +518,13 @@ public sealed class DictationService : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // Success: collapse to the compact idle pill and leave it on screen
-        // (per the Echo Bar design) instead of hiding. All failure paths above
-        // return early with HudError, so only successful dictations reach here.
+        // Success: collapse to the mini pill and leave it on screen instead of
+        // the full idle bar. All failure paths above return early with HudError,
+        // so only successful dictations reach here. State is set first (Idle
+        // repaints the idle card) and the minimize lands after it.
         State = DictationState.Idle;
         StatusText = "STANDBY / READY";
+        HudShouldMinimize?.Invoke();
     }
 
     private async Task<string> TranscribeVadSegmentsAsync(List<VadSegment> segments)

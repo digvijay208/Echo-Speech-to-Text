@@ -23,6 +23,13 @@ public sealed class GroqProvider : ISttProvider
     private string? _apiKey;
     private bool _disposed;
 
+    /// <summary>
+    /// ISO-639-1 spoken-language hint ("hi", "mr", …). Null/empty = omit the
+    /// field and let Groq auto-detect. Previously this was hardcoded to "en",
+    /// which forced every dictation through English decoding.
+    /// </summary>
+    public string? SpokenLanguage { get; set; }
+
     public string Name => $"Groq {Model}";
     public string Tier => "cloud";
     public bool IsLoaded => !string.IsNullOrEmpty(_apiKey);
@@ -63,7 +70,10 @@ public sealed class GroqProvider : ISttProvider
         content.Add(fileContent, "file", "audio.wav");
         content.Add(new StringContent(Model), "model");
         content.Add(new StringContent("json"), "response_format");
-        content.Add(new StringContent("en"), "language");
+        // Only hint the language when the user picked one; omitting it lets
+        // Groq auto-detect (required for Hindi/Marathi/… — "en" forces English).
+        if (!string.IsNullOrWhiteSpace(SpokenLanguage))
+            content.Add(new StringContent(SpokenLanguage.Trim().ToLowerInvariant()), "language");
 
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
         {

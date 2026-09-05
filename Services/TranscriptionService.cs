@@ -20,6 +20,10 @@ public sealed class TranscriptionService : IDisposable, Stt.ISttProvider
     private string? _prompt;
     private int _threadCount = 4;
 
+    // User-picked spoken language (ISO-639-1, null = auto-detect). Only applies
+    // to multilingual models; .en models are locked to "en" by Whisper itself.
+    private string? _forcedLanguage;
+
     // Guards factory/processor lifetime. A SemaphoreSlim (not lock) so transcription can
     // hold it across awaits without blocking the UI thread inside a monitor.
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -88,9 +92,12 @@ public sealed class TranscriptionService : IDisposable, Stt.ISttProvider
             _threadCount = Math.Clamp(logical >= 8 ? logical / 2 : logical, 1, 8);
             Logger.Info($"Configuring Whisper inference with {_threadCount} CPU threads ({logical} logical CPUs detected).");
 
+            // Record the incoming path BEFORE building: the builder resolves the
+            // language code from it, and reading the stale (previous) path here
+            // made base <-> small.en swaps keep the old language.
+            _loadedModelPath = fullPath;
             BuildProcessorUnsafe();
 
-            _loadedModelPath = fullPath;
             _isLoaded = true;
             Logger.Info("Whisper model loaded and processor ready.");
         }
@@ -218,18 +225,53 @@ public sealed class TranscriptionService : IDisposable, Stt.ISttProvider
     }
 
     /// <summary>
+    /// Pins the spoken language (ISO-639-1, null/empty = auto-detect).
+    /// Rebuilds the processor only when the value actually changes.
+    /// Ignored for .en models, which Whisper locks to English.
+    /// </summary>
+    public void SetLanguage(string? language)
+    {
+        string? effective = string.IsNullOrWhiteSpace(language)
+            ? null
+            : language.Trim().ToLowerInvariant();
+
+        _gate.Wait();
+        try
+        {
+            if (_disposed || effective == _forcedLanguage) return;
+
+            _forcedLanguage = effective;
+
+            if (_isLoaded && _factory != null)
+            {
+                BuildProcessorUnsafe();
+                Logger.Info($"Whisper language set to \"{effective ?? "auto"}\".");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to apply new Whisper language; keeping previous processor", ex);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
     /// Map the model filename back to a Whisper language code. .en variants are locked to
     /// English; everything else (multilingual ggml-*.bin) gets "auto" so the decoder
     /// detects language per segment.
     /// </summary>
-    private static string ResolveLanguageForModel(string? modelPath)
+    private string ResolveLanguageForModel(string? modelPath)
     {
         if (string.IsNullOrEmpty(modelPath)) return "en";
         string name = Path.GetFileNameWithoutExtension(modelPath);
         // Strip leading "ggml-" so "ggml-base.en.bin" ? "base.en".
         if (name.StartsWith("ggml-", StringComparison.OrdinalIgnoreCase))
             name = name[5..];
-        return name.EndsWith(".en", StringComparison.OrdinalIgnoreCase) ? "en" : "auto";
+        if (name.EndsWith(".en", StringComparison.OrdinalIgnoreCase)) return "en";
+        return _forcedLanguage ?? "auto";
     }
 
     private void ReleaseUnsafe()

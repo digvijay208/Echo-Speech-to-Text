@@ -14,19 +14,20 @@ using Color = System.Windows.Media.Color;
 namespace Echo.Views;
 
 /// <summary>
-/// Non-activating floating "Echo Bar" overlay with five visual states:
+/// Non-activating floating "Echo Bar" overlay with six visual states:
 /// Idle (mic + hint), Listening (pulsing dot, waveform, timer, cancel),
 /// Processing (spinner, purple wave, "Cleaning up…"), Inserted (green
-/// check, transcript, Undo) and Error (alert, retry). Never steals focus
+/// check, transcript, Undo), Error (alert, retry) and Mini (tiny resting
+/// pill — click to expand). Never steals focus
 /// from the target app.
 /// </summary>
 public partial class HudOverlayWindow : Window
 {
-    private enum HudVisual { Idle, Listening, Processing, Inserted, Error }
+    private enum HudVisual { Idle, Listening, Processing, Inserted, Error, Mini }
 
-    private const int BarCount = 22;
+    private const int BarCount = 18;
     private const double BarMinHeight = 3.5;
-    private const double BarMaxExtra = 26;
+    private const double BarMaxExtra = 18;
 
     private readonly Rectangle[] _bars = new Rectangle[BarCount];
     private readonly double[] _barHeights = new double[BarCount];
@@ -80,9 +81,11 @@ public partial class HudOverlayWindow : Window
 
         BuildWaveform();
 
-        _animTimer = new DispatcherTimer(DispatcherPriority.Render)
+        _animTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromMilliseconds(33)
+            // 20 fps is plenty for 22 bars; Render priority starved input
+            // handling and kept the UI thread hot the whole session.
+            Interval = TimeSpan.FromMilliseconds(50)
         };
         _animTimer.Tick += AnimTick;
 
@@ -90,7 +93,7 @@ public partial class HudOverlayWindow : Window
         _errorTimer.Tick += (_, _) =>
         {
             _errorTimer.Stop();
-            HideHud();
+            SetMiniState();
         };
 
         // Safe defaults; the first state change repaints immediately.
@@ -160,7 +163,16 @@ public partial class HudOverlayWindow : Window
         Show();
         PositionAtBottomCenter();
         _errorTimer.Stop();
-        if (!_animTimer.IsEnabled) _animTimer.Start();
+        // Only run the wave loop while something actually animates;
+        // SetVisual owns the timer for Listening/Processing states.
+        if (_visual is HudVisual.Listening or HudVisual.Processing)
+        {
+            if (!_animTimer.IsEnabled) _animTimer.Start();
+        }
+        else
+        {
+            _animTimer.Stop();
+        }
         BeginScoped(_fadeInStoryboard);
     }
 
@@ -243,6 +255,40 @@ public partial class HudOverlayWindow : Window
         _audioLevel = level;
     }
 
+    private DispatcherTimer? _statusFlashTimer;
+
+    /// <summary>
+    /// Briefly overlay a headline + subhead on top of the idle pill, then
+    /// auto-dismiss. Used for soft failures that don't warrant a full Error
+    /// card (no model, mic unplugged) so the user always sees feedback when
+    /// the hotkey is pressed.
+    /// </summary>
+    public void FlashStatus(string headline, string? subhead = null)
+    {
+        if (StatusFlashHeadline == null) return; // XAML not loaded
+
+        StatusFlashHeadline.Text = headline;
+        StatusFlashSubhead.Text = subhead ?? string.Empty;
+        StatusFlashSubhead.Visibility = string.IsNullOrEmpty(subhead)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        StatusFlashVisual.Visibility = Visibility.Visible;
+
+        // Auto-dismiss after 3s. Single timer; clicking dismiss is handled
+        // by the existing ActionButton handler if we want to extend it later.
+        if (_statusFlashTimer == null)
+        {
+            _statusFlashTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _statusFlashTimer.Tick += (_, _) =>
+            {
+                _statusFlashTimer.Stop();
+                StatusFlashVisual.Visibility = Visibility.Collapsed;
+            };
+        }
+        _statusFlashTimer.Stop();
+        _statusFlashTimer.Start();
+    }
+
     // ========================================================================
     // Internals
     // ========================================================================
@@ -274,15 +320,36 @@ public partial class HudOverlayWindow : Window
     {
         _visual = v;
 
-        // Idle pill runs smaller and tighter than the active cards.
+        // Mini owns its own element; every other state shows the full card.
+        MiniVisual.Visibility = v == HudVisual.Mini ? Visibility.Visible : Visibility.Collapsed;
+        HudCard.Visibility = v == HudVisual.Mini ? Visibility.Collapsed : Visibility.Visible;
+
+        // The wave timer only earns its keep while something animates.
+        // Idle/Inserted/Error/Mini are static — park the timer so the UI
+        // thread idles instead of re-laying-out bars 20x/sec forever.
+        // (ShowHud restarts it; HideHud stops it.)
+        if (v is HudVisual.Listening or HudVisual.Processing)
+        {
+            if (!_animTimer.IsEnabled) _animTimer.Start();
+        }
+        else
+        {
+            _animTimer.Stop();
+        }
+
+        if (v == HudVisual.Mini) return;
+
+        // Idle pill keeps the same size as the active cards (per the
+        // reference design — both are the same 32px icon, 14px text). The
+        // pill only differs in *content* (single line, no waveform).
         bool idle = v == HudVisual.Idle;
-        HudCard.Padding = idle ? new Thickness(12, 7, 10, 7) : new Thickness(16, 12, 16, 12);
-        IdleVisual.Width = idle ? 24 : 32;
-        IdleVisual.Height = idle ? 24 : 32;
-        IdleVisual.CornerRadius = new CornerRadius(idle ? 12 : 16);
-        MicGlyph.FontSize = idle ? 12 : 15;
-        EchoTitle.FontSize = idle ? 12 : 14;
-        IdleHint.FontSize = idle ? 11 : 12.5;
+        HudCard.Padding = idle ? new Thickness(10, 7, 10, 7) : new Thickness(12, 9, 12, 9);
+        IdleVisual.Width = 26;
+        IdleVisual.Height = 26;
+        IdleVisual.CornerRadius = new CornerRadius(13);
+        MicGlyph.FontSize = 12;
+        EchoTitle.FontSize = 13;
+        IdleHint.FontSize = 12;
 
         IdleVisual.Visibility = v == HudVisual.Idle ? Visibility.Visible : Visibility.Collapsed;
         RecDotVisual.Visibility = v == HudVisual.Listening ? Visibility.Visible : Visibility.Collapsed;
@@ -338,7 +405,35 @@ public partial class HudOverlayWindow : Window
                 StopScoped(_pulseStoryboard);
                 StopScoped(_spinnerStoryboard);
                 break;
+
+            case HudVisual.Mini:
+                break;
         }
+    }
+
+    /// <summary>
+    /// Collapse to the tiny resting pill (post-insert, cancelled, or expired
+    /// error). Clicking the pill expands back to the idle bar.
+    /// </summary>
+    public void SetMiniState()
+    {
+        TranscriptRow.Visibility = Visibility.Collapsed;
+        SetVisual(HudVisual.Mini);
+    }
+
+    /// <summary>Show the window in its mini-pill form.</summary>
+    public void ShowMini()
+    {
+        PositionAtBottomCenter();
+        SetMiniState();
+        Show();
+        PositionAtBottomCenter();
+        BeginScoped(_fadeInStoryboard);
+    }
+
+    private void MiniVisual_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        SetIdleState();
     }
 
     private void SetActionButton(UIElement content, string kind)
@@ -365,6 +460,7 @@ public partial class HudOverlayWindow : Window
 
     private void AnimTick(object? sender, EventArgs e)
     {
+        if (!IsVisible) return;
         _phase += 0.45;
 
         if (_visual == HudVisual.Listening)
@@ -391,7 +487,7 @@ public partial class HudOverlayWindow : Window
             for (int i = 0; i < BarCount; i++)
             {
                 double env = 0.4 + 0.6 * _envelope[i];
-                double target = BarMinHeight + 22 * env * (0.5 + 0.5 * Math.Sin(_phase * 2.3 - i * 0.5));
+                double target = BarMinHeight + BarMaxExtra * env * (0.5 + 0.5 * Math.Sin(_phase * 2.3 - i * 0.5));
                 _barHeights[i] += (target - _barHeights[i]) * 0.35;
                 _bars[i].Height = _barHeights[i];
             }
@@ -418,7 +514,7 @@ public partial class HudOverlayWindow : Window
             case "undo":
                 ActionButton.IsEnabled = false;
                 UndoRequested?.Invoke(_undoChars);
-                HideHud();
+                ShowMini();
                 break;
 
             case "retry":
@@ -427,7 +523,7 @@ public partial class HudOverlayWindow : Window
                 break;
 
             case "dismiss":
-                HideHud();
+                ShowMini();
                 break;
         }
     }

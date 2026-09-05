@@ -109,16 +109,20 @@ public partial class App : Application
             vadEnabled: () => _settings!.VadEnabled);
 
         // Create HUD overlay. The idle Echo Bar pill is visible from launch;
-        // dictation states swap it for the active cards, and it returns to the
-        // idle pill after each successful dictation.
+        // dictation states swap it for the active cards, and successful runs
+        // collapse it to the mini pill (click the pill to expand it back).
         _hudWindow = new HudOverlayWindow();
         _hudWindow.SetIdleState();
         _hudWindow.ShowHud();
 
-        // Wire up HUD to dictation service
-        _dictation.HudShouldShow += () => Dispatcher.Invoke(() => _hudWindow.ShowHud());
-        _dictation.HudShouldHide += () => Dispatcher.Invoke(() => _hudWindow.HideHud());
-        _dictation.HudError += msg => Dispatcher.Invoke(() => _hudWindow.SetErrorState(msg));
+        // Wire up HUD to dictation service. All hops are async (BeginInvoke):
+        // these events fire from the audio/hook threads ~20x/sec, and a blocking
+        // Invoke would stall the global input chain behind the UI thread.
+        _dictation.HudShouldShow += () => Dispatcher.BeginInvoke(() => _hudWindow.ShowHud());
+        _dictation.HudShouldHide += () => Dispatcher.BeginInvoke(() => _hudWindow.ShowMini());
+        _dictation.HudShouldMinimize += () => Dispatcher.BeginInvoke(() => _hudWindow.ShowMini());
+        _dictation.HudError += msg => Dispatcher.BeginInvoke(() => _hudWindow.SetErrorState(msg));
+        _dictation.HudStatusFlash += (headline, sub) => Dispatcher.BeginInvoke(() => _hudWindow.FlashStatus(headline, sub));
 
         // HUD buttons. Undo must wait for the injection to finish before sending
         // backspaces, or it would delete the user's own text instead of ours.
@@ -135,12 +139,16 @@ public partial class App : Application
                 Logger.Error("HUD undo failed", ex);
             }
         };
-        _hudWindow.RetryRequested += () => Dispatcher.Invoke(() => _dictation!.StartManualRecording());
-        _hudWindow.CancelRequested += () => Dispatcher.Invoke(() => _dictation!.CancelRecording());
+        _hudWindow.RetryRequested += () => Dispatcher.BeginInvoke(() => _dictation!.StartManualRecording());
+        _hudWindow.CancelRequested += () => Dispatcher.BeginInvoke(() => _dictation!.CancelRecording());
 
+        // Throttle level forwarding: the capture thread raises AudioLevel ~20x/sec
+        // but the HUD smooths internally, so ~15 fps is visually identical and
+        // halves UI-thread wakeups. Levels only matter while listening.
+        long lastLevelForwardTicks = 0;
         _dictation.PropertyChanged += (_, args) =>
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(() =>
             {
                 if (args.PropertyName == nameof(DictationService.State))
                 {
@@ -164,6 +172,12 @@ public partial class App : Application
                 }
                 else if (args.PropertyName == nameof(DictationService.AudioLevel))
                 {
+                    if (_dictation.State != DictationService.DictationState.Recording)
+                        return;
+                    long now = DateTime.UtcNow.Ticks;
+                    if (now - lastLevelForwardTicks < TimeSpan.TicksPerMillisecond * 66)
+                        return;
+                    lastLevelForwardTicks = now;
                     _hudWindow.UpdateAudioLevel(_dictation.AudioLevel);
                 }
             });
@@ -174,7 +188,9 @@ public partial class App : Application
             _modelManager,
             _keyboardHook,
             _audioCapture,
-            OnModelReady);
+            OnModelReady,
+            _dictionaryService,
+            _historyService);
 
         // Bind persisted settings to the new UI so the controls reflect
         // what's on disk and any change persists to settings.json.
@@ -182,20 +198,26 @@ public partial class App : Application
             _settings!,
             _groq,
             vadAvailable: () => _vad != null,
-            onSttEngineChanged: () => ApplySttEngineSelection());
+            onSttEngineChanged: () => ApplySttEngineSelection(),
+            onLanguageChanged: () => ApplySpokenLanguage());
 
         // Create and Show Main Desktop Window
         _mainWindow = new MainWindow(
             _dictation,
             _historyService,
             _dictionaryService,
-            ShowSettings);
+            ShowSettings,
+            _settings);
 
         MainWindow = _mainWindow;
         _mainWindow.Show();
 
         // Create system tray icon as secondary status
         SetupTrayIcon();
+
+        // Apply the persisted spoken language before loading, so the initial
+        // Whisper processor is built with the right language code.
+        ApplySpokenLanguage();
 
         // Auto-load best available model on disk
         TryLoadModel();
@@ -295,12 +317,27 @@ public partial class App : Application
     {
         Dispatcher.Invoke(() =>
         {
-            if (_mainWindow != null)
+            // The window may have been fully closed (e.g. via the in-app
+            // ✕ button if a future change makes that path actually close
+            // the window). In that case _mainWindow is non-null but its
+            // handle is gone — Show() would throw. Re-create it from
+            // scratch so the tray "Show Main Deck" menu always works.
+            if (_mainWindow != null && _mainWindow.IsLoaded)
             {
                 _mainWindow.Show();
                 _mainWindow.WindowState = WindowState.Normal;
                 _mainWindow.Activate();
+                return;
             }
+
+            _mainWindow = new MainWindow(
+                _dictation!,
+                _historyService!,
+                _dictionaryService!,
+                ShowSettings,
+                _settings!);
+            MainWindow = _mainWindow;
+            _mainWindow.Show();
         });
     }
 
@@ -359,6 +396,33 @@ public partial class App : Application
             Logger.Warn($"Silero VAD unavailable ({ex.Message}); VAD will be disabled.");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Apply the user's spoken-language choice to both cloud and local
+    /// engines. Called from Settings when the picker changes; idempotent.
+    /// </summary>
+    private void ApplySpokenLanguage()
+    {
+        if (_settings == null) return;
+        string? lang = string.IsNullOrWhiteSpace(_settings.SpokenLanguage)
+            ? null
+            : _settings.SpokenLanguage.Trim().ToLowerInvariant();
+
+        if (_groq != null) _groq.SpokenLanguage = lang;
+        try
+        {
+            // Rebuilds the local Whisper processor only when the value changed;
+            // Groq just carries the hint into the next request.
+            _transcription?.SetLanguage(lang);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to apply spoken language: {ex.Message}");
+        }
+
+        _dictation?.NotifyModelChanged();
+        Logger.Info(lang == null ? "Spoken language: auto-detect." : $"Spoken language: {lang}.");
     }
 
     /// <summary>

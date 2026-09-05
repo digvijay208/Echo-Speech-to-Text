@@ -56,4 +56,12 @@ public class HistoryEntry
     public string CorrectionsSummary => HasCorrections
         ? string.Join(", ", AppliedCorrections.Select(c => c.DisplayText))
         : "";
+
+    [JsonIgnore]
+    public int WordCount => string.IsNullOrWhiteSpace(FinalText)
+        ? 0
+        : FinalText.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+
+    [JsonIgnore]
+    public string WordCountText => $"{WordCount} word{(WordCount == 1 ? "" : "s")}";
 }

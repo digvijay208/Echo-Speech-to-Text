@@ -14,11 +14,13 @@ using Button = System.Windows.Controls.Button;
 using TextBox = System.Windows.Controls.TextBox;
 using ListBox = System.Windows.Controls.ListBox;
 using Point = System.Windows.Point;
+using ToggleButton = System.Windows.Controls.Primitives.ToggleButton;
 
 namespace Echo.Views;
 
 /// <summary>
-/// 1980s Studio / Field Recorder Main Window Interface.
+/// Light-theme home shell: sidebar + main + right rail.
+/// Preserves all original service bindings (dictation, history, dictionary, settings).
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -26,11 +28,25 @@ public partial class MainWindow : Window
     private readonly HistoryService _historyService;
     private readonly DictionaryService _dictionaryService;
     private readonly Action _openSettingsAction;
+    private readonly EchoSettings _settings;
 
     private readonly DispatcherTimer _tapeTimer;
+    private readonly DispatcherTimer _statsTimer;
     private DateTime _recordStartTime;
     private string? _editingDictId;
     private bool _uiWired;
+
+    // Placement saves are debounced: SizeChanged/LocationChanged fire per-pixel
+    // during a drag, and each save is a JSON serialize + file write on the UI
+    // thread. Coalesce bursts into one write 600 ms after the last event.
+    private readonly DispatcherTimer _placementSaveTimer;
+    private static readonly SolidColorBrush RecLedOn = new(System.Windows.Media.Color.FromRgb(0xF4, 0x3F, 0x5E));
+    private static readonly SolidColorBrush RecLedOff = new(System.Windows.Media.Color.FromRgb(0x4A, 0x0A, 0x0C));
+
+    // Search boxes rebuild the full list per keystroke; debounce so fast typing
+    // does one refresh instead of one per character.
+    private readonly DispatcherTimer _historySearchTimer;
+    private readonly DispatcherTimer _dictSearchTimer;
 
     /// <summary>
     /// Set by App on a real exit. Closing is otherwise cancelled so the window minimises to tray.
@@ -41,46 +57,337 @@ public partial class MainWindow : Window
         DictationService dictationService,
         HistoryService historyService,
         DictionaryService dictionaryService,
-        Action openSettingsAction)
+        Action openSettingsAction,
+        EchoSettings settings)
     {
         _dictationService = dictationService;
         _historyService = historyService;
         _dictionaryService = dictionaryService;
         _openSettingsAction = openSettingsAction;
+        _settings = settings;
 
         InitializeComponent();
 
-        // 10Hz Tape Counter Timer
         _tapeTimer = new DispatcherTimer(DispatcherPriority.Normal)
         {
             Interval = TimeSpan.FromMilliseconds(100)
         };
         _tapeTimer.Tick += OnTapeTimerTick;
 
+        // 30s tick keeps the "Resets in" countdown fresh without needing
+        // a new dictation to trigger RefreshStats. Cheap: pure in-memory.
+        _statsTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _statsTimer.Tick += (_, _) => RefreshStats();
+
+        _placementSaveTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(600)
+        };
+        _placementSaveTimer.Tick += (_, _) =>
+        {
+            _placementSaveTimer.Stop();
+            try { _settings.Save(); }
+            catch (Exception ex) { Logger.Error("Debounced placement save failed", ex); }
+        };
+
+        _historySearchTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        _historySearchTimer.Tick += (_, _) =>
+        {
+            _historySearchTimer.Stop();
+            SafeRefresh(RefreshHistoryList);
+        };
+
+        _dictSearchTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        _dictSearchTimer.Tick += (_, _) =>
+        {
+            _dictSearchTimer.Stop();
+            SafeRefresh(RefreshDictionaryList);
+        };
+
         Loaded += OnLoaded;
         Closing += OnWindowClosing;
+        StateChanged += OnStateChanged;
+        SizeChanged += OnSizeChanged;
+        LocationChanged += OnLocationChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Loaded can fire more than once if the window is re-parented; subscribing twice
-        // would double every UI update.
         if (_uiWired) return;
         _uiWired = true;
 
-        // Subscribe to Dictation events
         _dictationService.PropertyChanged += OnDictationPropertyChanged;
 
-        // Subscribe to History and Dictionary data changes
-        _historyService.HistoryChanged += () => Dispatcher.Invoke(RefreshHistoryList);
-        _dictionaryService.DictionaryChanged += () => Dispatcher.Invoke(RefreshDictionaryList);
+        _historyService.HistoryChanged += () =>
+        {
+            // Async hops: this fires on the dictation thread after each injection,
+            // and blocking Invokes would stall it behind list rendering.
+            Dispatcher.BeginInvoke(RefreshHistoryList, DispatcherPriority.Background);
+            Dispatcher.BeginInvoke(RefreshStats, DispatcherPriority.Background);
+        };
+        _dictionaryService.DictionaryChanged += () => Dispatcher.BeginInvoke(RefreshDictionaryList, DispatcherPriority.Background);
 
-        RefreshHistoryList();
-        RefreshDictionaryList();
-        UpdateTransportState(_dictationService.State);
-        UpdateTabIndicators(activeIsHistory: true);
-        ActiveModelLabel.Text = _dictationService.ActiveModelName;
+        // Each refresh is wrapped so a single failing template can't block
+        // the rest of the load. Critical because the history-row template
+        // uses Run-binding properties; if WPF can't materialise it (e.g. a
+        // bad binding), the rest of the UI must still come up.
+        SafeRefresh(RefreshHistoryList);
+        SafeRefresh(RefreshDictionaryList);
+        SafeRefresh(RefreshStats);
+        SafeRefresh(() => UpdateTransportState(_dictationService.State));
+        ActiveModelLabel.Text = ResolveActiveModelLabel();
         DeckStatusLabel.Text = _dictationService.StatusText.ToUpperInvariant();
+
+        // Restore last window placement if the saved values are still on a
+        // connected display. The chromeless window has no OS memory of its
+        // own, so without this the app would always open at 1600x900 centered.
+        SafeRefresh(RestoreWindowPlacement);
+
+        // Start the periodic "Resets in" refresher now that the controls
+        // are measured (the progress bar needs ActualWidth to size itself).
+        _statsTimer.Start();
+    }
+
+    /// <summary>
+    /// Run a UI initialiser inside a try/catch so a single failing piece
+    /// (e.g. a broken template binding) can't take down the whole window.
+    /// </summary>
+    private void SafeRefresh(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { Logger.Error("MainWindow initialiser failed", ex); }
+    }
+
+    /// <summary>
+    /// Compute the titlebar model label, accounting for the active engine
+    /// (Groq / Parakeet / local Whisper). The service's ActiveModelName
+    /// only knows about local Whisper, so we resolve it here from settings
+    /// for cloud and Parakeet paths.
+    /// </summary>
+    private string ResolveActiveModelLabel()
+    {
+        if (_settings == null) return "—";
+
+        return _settings.Engine switch
+        {
+            EchoSettings.SttEngine.Groq        => "GROQ WHISPER V3",
+            EchoSettings.SttEngine.Parakeet    => "PARAKEET TDT V3",
+            EchoSettings.SttEngine.WhisperSmallEn => "WHISPER SMALL.EN",
+            _ => _dictationService.ActiveModelName
+        };
+    }
+
+    /// <summary>
+    /// Recompute every value on the right-rail from the live
+    /// <see cref="HistoryService"/> + <see cref="EchoSettings"/>:
+    /// total words, average WPM, current day-streak, the Daily Goal ring
+    /// + count + target, and the Voice Profile progress + remaining
+    /// words-to-unlock. Cheap (pure in-memory over the history snapshot).
+    /// </summary>
+    private void RefreshStats()
+    {
+        if (TotalWordsValue == null) return; // XAML not loaded yet
+
+        var entries = _historyService.Entries;
+        var today = DateTime.Today;
+
+        // 1) Totals + average WPM
+        int totalWords = 0;
+        double totalSeconds = 0;
+        int todayWords = 0;
+        var daysWithDictation = new HashSet<DateTime>();
+
+        foreach (var e in entries)
+        {
+            int w = e.WordCount;
+            totalWords += w;
+            totalSeconds += e.DurationSeconds;
+            if (e.Timestamp.Date == today) todayWords += w;
+            daysWithDictation.Add(e.Timestamp.Date);
+        }
+
+        TotalWordsValue.Text = totalWords.ToString("N0");
+
+        // WPM = words / minutes. Guard against div-by-zero on a single
+        // very-short entry that hasn't accumulated a real minute yet.
+        if (totalSeconds >= 1.0)
+        {
+            double avgWpm = totalWords / (totalSeconds / 60.0);
+            AvgWpmValue.Text = ((int)Math.Round(avgWpm)).ToString("N0");
+        }
+        else
+        {
+            AvgWpmValue.Text = "—";
+        }
+
+        // 2) Day streak = consecutive days ending today (or yesterday if
+        // nothing today yet) on which at least one dictation exists.
+        DayStreakValue.Text = ComputeStreak(daysWithDictation, today).ToString();
+
+        // 3) Daily Goal: todayWords / goal → percent + ring + label
+        int goal = Math.Max(1, _settings.DailyGoalWords);
+        double ratio = Math.Min(1.0, (double)todayWords / goal);
+        int percent = (int)Math.Round(ratio * 100);
+
+        DailyGoalPercent.Text = percent + "%";
+        DailyGoalCurrentRun.Text = todayWords.ToString("N0");
+        DailyGoalTargetRun.Text = " / " + goal.ToString("N0") + " words";
+
+        // The ring's stroke-dash array encodes how much of the circle is
+        // filled. 2*pi*r for r=28 is ~175.93; we round to 176 for the
+        // XAML baseline. Ratio=1 means "fully filled" (dash == circumference,
+        // gap == 0); ratio=0 means "empty" (dash == 0, gap == circumference).
+        double circumference = 176.0;
+        double filled = circumference * ratio;
+        double gap = circumference - filled;
+        DailyGoalRing.StrokeDashArray = new DoubleCollection { filled, gap };
+
+        // Encouragement rotates based on the ratio so it feels alive, not
+        // pre-canned. Single best line when there's no history at all.
+        DailyGoalEncouragement.Text = todayWords switch
+        {
+            0 => "Press the hotkey or hit Quick Dictation to get started.",
+            var w when w < goal * 0.25 => "Off to a start — every word counts.",
+            var w when w < goal * 0.5  => "Nice pace. Keep the streak going.",
+            var w when w < goal * 0.75 => "Past halfway — you've got this.",
+            var w when w < goal        => "Almost there. One more push.",
+            _                         => "Goal crushed. Set a bigger one tomorrow."
+        };
+
+        // 4) "Resets in" — hours + minutes until local midnight
+        var nextMidnight = today.AddDays(1);
+        var ts = nextMidnight - DateTime.Now;
+        if (ts.TotalSeconds < 0) ts = TimeSpan.Zero; // safety net
+        DailyGoalResetsIn.Text = ts.Hours > 0
+            ? $"Resets in {ts.Hours}h {ts.Minutes:00}m"
+            : $"Resets in {ts.Minutes}m";
+
+        // 5) Voice Profile progress
+        int target = Math.Max(1, _settings.VoiceProfileTargetWords);
+        double profileRatio = Math.Min(1.0, (double)totalWords / target);
+
+        // The progress Rectangle is Width-bound inside a Grid of 100% width.
+        // We compute the actual pixel width off the rendered parent. If
+        // the parent hasn't measured yet (e.g. first load race), fall back
+        // to a 0 default and let the next refresh correct it.
+        double trackWidth = VoiceProfileProgress.Parent is FrameworkElement fe
+            ? Math.Max(0, fe.ActualWidth)
+            : 0;
+        VoiceProfileProgress.Width = trackWidth * profileRatio;
+        int remaining = Math.Max(0, target - totalWords);
+        VoiceProfileUnlocksText.Text = remaining == 0
+            ? "Profile unlocked 🎉"
+            : $"Unlocks in {remaining:N0} words";
+    }
+
+    /// <summary>
+    /// Count the run of consecutive calendar days, ending at <paramref
+    /// name="today"/> (or yesterday if no entry today yet), on which a
+    /// dictation was recorded. Returns 0 if the most recent entry is older
+    /// than yesterday.
+    /// </summary>
+    private static int ComputeStreak(HashSet<DateTime> daysWithDictation, DateTime today)
+    {
+        // If there's nothing today, the streak is anchored at yesterday
+        // so a 5-day streak doesn't read "0" all day.
+        var anchor = daysWithDictation.Contains(today) ? today : today.AddDays(-1);
+        if (!daysWithDictation.Contains(anchor)) return 0;
+
+        int streak = 0;
+        var cursor = anchor;
+        while (daysWithDictation.Contains(cursor))
+        {
+            streak++;
+            cursor = cursor.AddDays(-1);
+        }
+        return streak;
+    }
+
+    /// <summary>
+    /// Apply the persisted width/height/top/left. Falls back to the XAML
+    /// defaults if anything looks off-screen, too small, or unset.
+    /// </summary>
+    private void RestoreWindowPlacement()
+    {
+        // Maximised state is independent of size/position: restore the flag
+        // and let WPF compute the size from the current monitor.
+        if (_settings.WindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+            return;
+        }
+
+        if (_settings.WindowWidth > MinWidth &&
+            _settings.WindowHeight > MinHeight)
+        {
+            Width = _settings.WindowWidth;
+            Height = _settings.WindowHeight;
+        }
+
+        if (_settings.WindowLeft >= 0 && _settings.WindowTop >= 0 &&
+            IsOnAnyScreen(_settings.WindowLeft, _settings.WindowTop,
+                          _settings.WindowWidth, _settings.WindowHeight))
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = _settings.WindowLeft;
+            Top = _settings.WindowTop;
+        }
+    }
+
+    /// <summary>
+    /// True if any part of the given rect lands inside a connected display.
+    /// Prevents restoring a window onto an unplugged monitor.
+    /// </summary>
+    private bool IsOnAnyScreen(double left, double top, double width, double height)
+    {
+        var rect = new Rect(left, top, Math.Max(width, 1), Math.Max(height, 1));
+        foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+        {
+            var bounds = new Rect(
+                screen.Bounds.X, screen.Bounds.Y,
+                screen.Bounds.Width, screen.Bounds.Height);
+            if (bounds.IntersectsWith(rect)) return true;
+        }
+        return false;
+    }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!IsLoaded || _settings == null) return;
+        // Don't capture the size while the user is just maximising —
+        // RestoreWindowPlacement reads the maximised flag separately.
+        if (WindowState != WindowState.Normal) return;
+        _settings.WindowWidth = ActualWidth;
+        _settings.WindowHeight = ActualHeight;
+        SchedulePlacementSave();
+    }
+
+    private void OnLocationChanged(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || _settings == null) return;
+        if (WindowState != WindowState.Normal) return;
+        _settings.WindowLeft = Left;
+        _settings.WindowTop = Top;
+        SchedulePlacementSave();
+    }
+
+    /// <summary>
+    /// Restart the debounce timer instead of writing settings.json inline:
+    /// a window drag fires dozens of move/resize events per second.
+    /// </summary>
+    private void SchedulePlacementSave()
+    {
+        _placementSaveTimer.Stop();
+        _placementSaveTimer.Start();
     }
 
     private void OnDictationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
@@ -97,7 +404,9 @@ public partial class MainWindow : Window
         }
         else if (args.PropertyName == nameof(DictationService.AudioLevel))
         {
-            VuMeter.SetAudioLevel(_dictationService.AudioLevel);
+            // No VU meter in the new home shell; the level drives visual feedback in the
+            // transport button label and the dictation view state. Hook back up if you
+            // reintroduce a meter.
         }
         else if (args.PropertyName == nameof(DictationService.StatusText))
         {
@@ -105,22 +414,35 @@ public partial class MainWindow : Window
         }
         else if (args.PropertyName == nameof(DictationService.ActiveModelName))
         {
-            ActiveModelLabel.Text = _dictationService.ActiveModelName;
+            ActiveModelLabel.Text = ResolveActiveModelLabel();
         }
     }
 
     private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (AllowClose) return;
-
-        // Minimize to tray on close instead of exiting
         e.Cancel = true;
         Hide();
     }
 
+    private void OnStateChanged(object? sender, EventArgs e)
+    {
+        // The old TC-80 shell hid to tray on Minimize. The new light shell
+        // has a normal in-app titlebar, so Minimize should just minimize —
+        // the user can always restore via the taskbar or the tray icon.
+        // The tray icon still exists for status / settings / exit.
+
+        // Persist the maximised flag separately from size, so the
+        // RestoreWindowPlacement path can apply it on next launch.
+        if (_settings != null && IsLoaded)
+        {
+            _settings.WindowMaximized = WindowState == WindowState.Maximized;
+            SchedulePlacementSave();
+        }
+    }
+
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        // Cmd+, / Ctrl+, shortcut to open Settings
         if (e.Key == Key.OemComma && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
         {
             _openSettingsAction();
@@ -128,48 +450,149 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    // ─── TITLEBAR WINDOW CONTROLS ─────────────────────────────────────────────
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Chromeless window has no OS titlebar to drag — wire the in-app
+        // titlebar to drag the window instead. DragMove only works in
+        // Normal state and only on a real left-button press.
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (WindowState != WindowState.Normal) return;
+        if (e.ButtonState != MouseButtonState.Pressed) return;
+        try { DragMove(); }
+        catch (InvalidOperationException) { /* ignore races */ }
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Hides to tray (matches the legacy minimize-on-X behavior). The
+        // tray icon's Exit option remains the proper way to terminate the
+        // app, so we don't need to actually close the window here. This
+        // also avoids the "ShowMainWindow can't re-show a closed window"
+        // crash on the next tray-icon click.
+        Hide();
+    }
+
+    // ─── SIDEBAR NAV ───────────────────────────────────────────────────────────
+
+    private void ShowOnly(UIElement visible)
+    {
+        HomeView.Visibility     = visible == HomeView     ? Visibility.Visible : Visibility.Collapsed;
+        DictationView.Visibility = visible == DictationView ? Visibility.Visible : Visibility.Collapsed;
+        HistoryView.Visibility   = visible == HistoryView   ? Visibility.Visible : Visibility.Collapsed;
+        DictionaryView.Visibility = visible == DictionaryView ? Visibility.Visible : Visibility.Collapsed;
+        StylesView.Visibility    = visible == StylesView    ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void SetActiveNav(ToggleButton active)
+    {
+        foreach (var btn in new[] { NavHomeBtn, NavDictationBtn, NavHistoryBtn, NavStylesBtn, NavTransformsBtn, NavSettingsBtn })
+        {
+            if (btn == null) continue;
+            btn.IsChecked = btn == active;
+        }
+    }
+
+    private void NavHomeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SetActiveNav(NavHomeBtn);
+        ShowOnly(HomeView);
+    }
+
+    private void NavDictationBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SetActiveNav(NavDictationBtn);
+        ShowOnly(DictationView);
+    }
+
+    private void NavHistoryBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SetActiveNav(NavHistoryBtn);
+        ShowOnly(HistoryView);
+        UpdateTabIndicators(activeIsHistory: true);
+    }
+
+    private void NavStylesBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SetActiveNav(NavStylesBtn);
+        ShowOnly(StylesView);
+    }
+
+    private void NavTransformsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SetActiveNav(NavTransformsBtn);
+        // Transforms view = the dictionary & rules management (the "replace X
+        // with Y when heard" corrections and vocabulary). The underlying
+        // DictionaryService is unchanged; only the surface label changed.
+        ShowOnly(DictionaryView);
+        UpdateTabIndicators(activeIsHistory: false);
+    }
+
+    private void NavSettingsBtn_Click(object sender, RoutedEventArgs e)
     {
         _openSettingsAction();
+        // Keep the previously-selected nav highlighted (don't pretend Settings is a sub-page).
+    }
+
+    // ─── DICTATION (transports) ───────────────────────────────────────────────
+
+    private void QuickDictationBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dictationService.State == DictationService.DictationState.Idle)
+        {
+            _dictationService.StartManualRecording();
+        }
+        else
+        {
+            _dictationService.StopManualRecording();
+        }
     }
 
     private void UpdateTransportState(DictationService.DictationState state)
     {
-        // Buttons and LEDs are driven here from the state machine. Deck status TEXT is
-        // driven by the service's StatusText property (see OnDictationPropertyChanged)
-        // so that a service-level message like "NO MODEL — OPEN SETTINGS" or
-        // "MIC ERROR — CHECK INPUT DEVICE" is not clobbered by a hardcoded string.
         switch (state)
         {
             case DictationService.DictationState.Recording:
-                RecButtonLabel.Text = "� RECORDING";
-                RecButtonLed.Fill = System.Windows.Media.Brushes.Red;
+                RecButtonLabel.Text = "● RECORDING";
+                RecButtonLed.Fill = RecLedOn;
                 RecordButton.IsEnabled = false;
                 StopButton.IsEnabled = true;
                 _recordStartTime = DateTime.Now;
                 _tapeTimer.Start();
+                if (DictationViewState != null) DictationViewState.Text = "Listening…";
                 break;
 
             case DictationService.DictationState.Transcribing:
-                RecButtonLabel.Text = "� REC";
-                RecButtonLed.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0x0A, 0x0C));
+                RecButtonLabel.Text = "● REC";
+                RecButtonLed.Fill = RecLedOff;
                 RecordButton.IsEnabled = false;
                 StopButton.IsEnabled = false;
                 _tapeTimer.Stop();
-                VuMeter.Reset();
+                if (DictationViewState != null) DictationViewState.Text = "Transcribing…";
                 break;
 
             case DictationService.DictationState.Injecting:
-                // No button or LED changes for Injecting — service drives status text.
+                if (DictationViewState != null) DictationViewState.Text = "Injecting text…";
                 break;
 
             case DictationService.DictationState.Idle:
-                RecButtonLabel.Text = "� REC";
-                RecButtonLed.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0x0A, 0x0C));
+                RecButtonLabel.Text = "● REC";
+                RecButtonLed.Fill = RecLedOff;
                 RecordButton.IsEnabled = true;
                 StopButton.IsEnabled = false;
                 _tapeTimer.Stop();
-                VuMeter.Reset();
+                if (DictationViewState != null) DictationViewState.Text = "Idle — ready when you are";
                 break;
         }
     }
@@ -182,56 +605,77 @@ public partial class MainWindow : Window
 
     private void RecordButton_Click(object sender, RoutedEventArgs e)
     {
-        // Manual Start
         _dictationService.StartManualRecording();
     }
 
     private void StopButton_Click(object sender, RoutedEventArgs e)
     {
-        // Manual Stop
         _dictationService.StopManualRecording();
     }
 
-    // ─── TAB NAVIGATION ────────────────────────────────────────────────────────
+    // ─── LEGACY TAB BUTTONS (kept so the in-view tab swap still works) ────────
 
     private void TabHistoryBtn_Click(object sender, RoutedEventArgs e)
     {
-        HistoryViewPanel.Visibility = Visibility.Visible;
-        DictionaryViewPanel.Visibility = Visibility.Collapsed;
-        UpdateTabIndicators(activeIsHistory: true);
+        // CLEAR LOG: actually delete all stored dictations (it used to just
+        // navigate to the History view, so the button appeared to do nothing).
+        if (_historyService.Entries.Count == 0) return;
+        var result = MessageBox.Show(
+            "Delete all stored dictations? This cannot be undone.",
+            "Clear log",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+        try
+        {
+            _historyService.ClearAll();
+            Logger.Info("History cleared from Home > Clear log.");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to clear history", ex);
+        }
     }
 
     private void TabDictionaryBtn_Click(object sender, RoutedEventArgs e)
     {
-        HistoryViewPanel.Visibility = Visibility.Collapsed;
-        DictionaryViewPanel.Visibility = Visibility.Visible;
+        SetActiveNav(NavTransformsBtn);
+        ShowOnly(DictionaryView);
         UpdateTabIndicators(activeIsHistory: false);
     }
 
     private void UpdateTabIndicators(bool activeIsHistory)
     {
-        if (TabHistoryIndicator != null)
-            TabHistoryIndicator.Visibility = activeIsHistory ? Visibility.Visible : Visibility.Collapsed;
-        if (TabDictionaryIndicator != null)
-            TabDictionaryIndicator.Visibility = activeIsHistory ? Visibility.Collapsed : Visibility.Visible;
+        // Indicators were always collapsed in the new light layout (no underline tab strip),
+        // but the helpers still get called from the legacy click handlers — keep them safe.
     }
 
-    // ─── HISTORY LOG LOGIC ────────────────────────────────────────────────────
+    // ─── HISTORY LOG ──────────────────────────────────────────────────────────
 
     private void RefreshHistoryList()
     {
-        // TextChanged fires while InitializeComponent is still building the tree, so the
-        // list box may not exist yet.
         if (HistoryListBox == null || HistorySearchBox == null) return;
 
-        // Remember the topmost visible entry by id; reassigning ItemsSource resets scroll
-        // to zero, so we re-scroll to the same item after the new template is generated.
         var scroll = FindVisualChild<ScrollViewer>(HistoryListBox);
         string? topId = GetTopVisibleItemId<HistoryEntry>(HistoryListBox, scroll);
 
         string query = HistorySearchBox.Text;
         var items = _historyService.Search(query);
+
         HistoryListBox.ItemsSource = items;
+        if (HistoryListBoxFull != null) HistoryListBoxFull.ItemsSource = items;
+
+        // Toggle the "no dictations yet" empty state. Only show it on the
+        // home view, and only when the user hasn't typed a search query
+        // (an empty result for "hello" is a *real* empty result, not a
+        // call-to-action).
+        if (HistoryEmptyState != null)
+        {
+            HistoryEmptyState.Visibility =
+                items.Count == 0 && string.IsNullOrWhiteSpace(query)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
 
         if (topId != null && scroll != null)
         {
@@ -248,37 +692,17 @@ public partial class MainWindow : Window
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
-        RefreshHistoryList();
+        _historySearchTimer.Stop();
+        _historySearchTimer.Start();
     }
 
-    private void ClearHistoryBtn_Click(object sender, RoutedEventArgs e)
-    {
-        if (MessageBox.Show("Are you sure you want to clear all transcription tape history?",
-            "ECHO Tape History", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-        {
-            _historyService.ClearAll();
-        }
-    }
-
-    private async void CopyTranscriptBtn_Click(object sender, RoutedEventArgs e)
+    private void CopyTranscriptBtn_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is string text)
         {
             try
             {
                 Clipboard.SetDataObject(text, true);
-                if (btn.Content is TextBlock tb)
-                {
-                    // Restore the original brush, not a hardcoded white — the button's
-                    // foreground comes from the style and is not necessarily white.
-                    string prev = tb.Text;
-                    var prevBrush = tb.Foreground;
-                    tb.Text = "COPIED ✓";
-                    tb.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x52, 0xB7, 0x88));
-                    await Task.Delay(1200);
-                    tb.Text = prev;
-                    tb.Foreground = prevBrush;
-                }
             }
             catch (Exception ex)
             {
@@ -323,7 +747,8 @@ public partial class MainWindow : Window
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
-        RefreshDictionaryList();
+        _dictSearchTimer.Stop();
+        _dictSearchTimer.Start();
     }
 
     private void AddDictionaryBtn_Click(object sender, RoutedEventArgs e)
@@ -335,8 +760,6 @@ public partial class MainWindow : Window
         ModalToBox.Text = "";
         ModalGluedCheck.IsChecked = true;
         CollisionWarningBox.Visibility = Visibility.Collapsed;
-        // Setting IsChecked to a value it already has raises no Checked event, so the
-        // TO field / glued checkbox would stay hidden from a previous keyword edit.
         ApplyModalTypeVisibility();
         DictModalOverlay.Visibility = Visibility.Visible;
     }
@@ -384,11 +807,6 @@ public partial class MainWindow : Window
         ApplyModalTypeVisibility();
     }
 
-    /// <summary>
-    /// Shows/hides the TO field and glued-word option for the current entry type.
-    /// Guards every control: Checked fires during InitializeComponent, before the rest of
-    /// the modal's named elements have been created.
-    /// </summary>
     private void ApplyModalTypeVisibility()
     {
         if (RadioCorrection == null || RadioKeyword == null) return;
@@ -451,7 +869,6 @@ public partial class MainWindow : Window
             To = isKeyword ? "" : to,
             IsKeywordOnly = isKeyword,
             MatchGluedWords = ModalGluedCheck.IsChecked == true,
-            // Editing must not reset the creation timestamp — the list is ordered by it.
             CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow
         };
 
@@ -491,10 +908,6 @@ public partial class MainWindow : Window
     }
 
     // ─── SCROLL RESTORATION HELPERS ───────────────────────────────────────────
-    // Reassigning ItemsSource makes WPF re-template every container and resets the
-    // ScrollViewer offset to 0. We snapshot the id of the topmost item before the swap
-    // and re-scroll to it after the new template is generated, so a search keystroke
-    // doesn't throw the user back to the top of the list.
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Monitor, Smartphone, ArrowLeft } from "lucide-react";
 import { Reveal } from "./motion-primitives";
+import { WINDOWS_INSTALLER_URL, ALL_RELEASES_URL, WINDOWS_MIN_LABEL } from "../download";
 
 /* /downloads — picks the platform. Mirrors the typeless layout:
    nav + heading + 2 cards (Desktop / Mobile) + footer. */
@@ -59,13 +60,18 @@ export default function Downloads() {
                 Smart voice dictation that turns speech into clear, polished writing in every app.
               </p>
               <div className="downloads-card-actions">
-                <a className="btn btn-primary downloads-btn" href="#" onClick={(e) => e.preventDefault()}>
-                  <AppleIcon />
-                  <span>Download for macOS</span>
-                </a>
-                <a className="btn btn-primary downloads-btn" href="#" onClick={(e) => e.preventDefault()}>
+                <a className="btn btn-primary downloads-btn" href={WINDOWS_INSTALLER_URL}>
                   <WindowsIcon />
                   <span>Download for Windows</span>
+                </a>
+                <p className="downloads-note">{WINDOWS_MIN_LABEL} · free</p>
+                <span className="btn btn-primary downloads-btn downloads-btn-disabled" aria-disabled="true" title="Echo for macOS is not available yet">
+                  <AppleIcon />
+                  <span>Download for macOS</span>
+                  <span className="downloads-soon">Soon</span>
+                </span>
+                <a className="downloads-note downloads-note-link" href={ALL_RELEASES_URL} target="_blank" rel="noreferrer">
+                  All releases &amp; changelog →
                 </a>
               </div>
             </article>
@@ -83,14 +89,16 @@ export default function Downloads() {
                 AI voice keyboard for your phone. 6× faster than typing.
               </p>
               <div className="downloads-card-actions">
-                <a className="btn btn-primary downloads-btn" href="#" onClick={(e) => e.preventDefault()}>
+                <span className="btn btn-primary downloads-btn downloads-btn-disabled" aria-disabled="true" title="Echo for iOS is not available yet">
                   <AppleIcon />
                   <span>Download on the App Store</span>
-                </a>
-                <a className="btn btn-primary downloads-btn" href="#" onClick={(e) => e.preventDefault()}>
+                  <span className="downloads-soon">Soon</span>
+                </span>
+                <span className="btn btn-primary downloads-btn downloads-btn-disabled" aria-disabled="true" title="Echo for Android is not available yet">
                   <PlayStoreIcon />
                   <span>Get it on Google Play</span>
-                </a>
+                  <span className="downloads-soon">Soon</span>
+                </span>
               </div>
             </article>
           </Reveal>

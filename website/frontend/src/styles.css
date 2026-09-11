@@ -1362,3 +1362,35 @@ html.lenis, html.lenis body { height: auto; }
   font-size: 0.98rem;
   padding: 14px 22px;
 }
+
+/* Disabled OS option — app doesn't ship there yet (Windows-only for now). */
+.downloads-btn-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.downloads-soon {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 2px;
+  opacity: 0.9;
+}
+
+.downloads-note {
+  margin: 0;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.downloads-note-link {
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.downloads-note-link:hover { color: var(--ink); }
